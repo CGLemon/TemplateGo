@@ -30,8 +30,11 @@ int Search::nn_direct_output() {
 	Evaluation::NNeval eval = m_evaluation.network_eval(m_rootstate);
 
 	int to_move = m_rootstate.board.get_to_move();
-	int out_vertex = Board::NO_VERTEX;	
-	float most_policy = std::numeric_limits<float>::lowest(); 
+	int out_vertex = Board::NO_VERTEX;
+	float most_policy = std::numeric_limits<float>::lowest();
+
+	auto_printf("policy out : \n");
+ 
 	for (int idx = 0; idx < NUM_INTERSECTIONS; idx++) {
 		//const int x = idx % BOARD_SIZE;
         //const int y = idx / BOARD_SIZE;
@@ -46,12 +49,16 @@ int Search::nn_direct_output() {
 				out_vertex = vertex;
 			}
         }
+
+		auto_printf("%.5f ",eval.policy[idx]);
+		if (x == BOARD_SIZE-1) {
+			auto_printf("\n");
+		}
 	}
 	if (most_policy < eval.policy_pass) {
 		out_vertex = Board::PASS;
 	}
-
-
+	auto_printf("pass : %.5f \n",eval.policy_pass);
 
 	auto_printf("NN eval = ");
 	auto_printf("%f\n", eval.winrate[0]);

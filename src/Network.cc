@@ -31,7 +31,8 @@
 #include "zlib.h"
 #include "Utils.h"
 #include "NetPipe.h"
-#include "CPUPipe.h"
+#include "CPUbackend.h"
+#include "blas/CPUblas.h"
 #include "GameState.h"
 #include "Board.h"
 #include "cfg.h"
@@ -61,19 +62,69 @@
 
 using namespace Utils;
 
-bool Network::check_net_format(Networkfile_t file_type) {
+bool check_net_weight(std::vector<float>& weights, int count) {
+	bool succeess = (weights.size() == count);
+	if (succeess) {
+		weights.reserve(count);
+	} else {
+		auto_printf("Network file struct is wrong.\n");
+	}
+	return succeess;
+}
+
+
+bool Network::check_net_format(Networkfile_t file_type, const int resnet_channels, const int resnet_blocks) {
 
 	if (file_type == Networkfile_t::LEELAZ) {
 		if (OUTPUTS_POLICY != 2 &&
-				OUTPUTS_VALUE != 1 &&
-				INPUT_CHANNELS != 18 &&
-				VALUE_LAYER != 256 &&
-				VALUE_LABELS != 1 &&
-				POTENTIAL_MOVES != NUM_INTERSECTIONS+1 ) {
-
-			auto_printf("Network struct is wrong.\n");
+			OUTPUTS_VALUE != 1 &&
+			INPUT_CHANNELS != 18 &&
+			VALUE_LAYER != 256 &&
+			VALUE_LABELS != 1 )  {
+	
+			auto_printf("Network default struct is wrong.\n");
 			return false;
 		} else {
+
+			if (!check_net_weight(m_fwd_weights->m_conv_weights[0], INPUT_CHANNELS*9
+                                                                  * resnet_channels)) return false;
+			if (!check_net_weight(m_fwd_weights->m_conv_biases[0], resnet_channels)) return false;
+			if (!check_net_weight(m_fwd_weights->m_batchnorm_means[0], resnet_channels)) return false;
+			if (!check_net_weight(m_fwd_weights->m_batchnorm_stddevs[0], resnet_channels)) return false;
+
+			for (int i = 0; i < resnet_blocks; ++i) {
+				const int id = i+1;
+				if (!check_net_weight(m_fwd_weights->m_conv_weights[id], resnet_channels*9
+                                                                       * resnet_channels)) return false;
+				if (!check_net_weight(m_fwd_weights->m_conv_biases[id], resnet_channels)) return false;
+				if (!check_net_weight(m_fwd_weights->m_batchnorm_means[id], resnet_channels)) return false;
+				if (!check_net_weight(m_fwd_weights->m_batchnorm_stddevs[id], resnet_channels)) return false;
+			}
+
+			if (!check_net_weight(m_fwd_weights->m_conv_pol_w, OUTPUTS_POLICY*1
+                                                             * resnet_channels)) return false;
+			if (!check_net_weight(m_fwd_weights->m_conv_pol_b, OUTPUTS_POLICY)) return false;
+			if (!check_net_weight(m_bn_pol_w1, OUTPUTS_POLICY)) return false;
+			if (!check_net_weight(m_bn_pol_w2, OUTPUTS_POLICY)) return false;
+			if (!check_net_weight(m_ip_pol_w, OUTPUTS_POLICY
+                                            * NUM_INTERSECTIONS
+                                            * POTENTIAL_MOVES)) return false;
+			if (!check_net_weight(m_ip_pol_b, POTENTIAL_MOVES)) return false;			
+
+
+			if (!check_net_weight(m_fwd_weights->m_conv_val_w, OUTPUTS_VALUE*1
+                                                             * resnet_channels)) return false;
+			if (!check_net_weight(m_fwd_weights->m_conv_val_b, OUTPUTS_VALUE)) return false;
+			if (!check_net_weight(m_bn_val_w1, OUTPUTS_VALUE)) return false;
+			if (!check_net_weight(m_bn_val_w2, OUTPUTS_VALUE)) return false;
+			if (!check_net_weight(m_ip1_val_w, OUTPUTS_VALUE
+                                             * NUM_INTERSECTIONS
+                                             * VALUE_LAYER)) return false;
+			if (!check_net_weight(m_ip1_val_b, VALUE_LAYER)) return false;
+			if (!check_net_weight(m_ip2_val_w, VALUE_LAYER
+                                             * VALUE_LABELS)) return false;
+			if (!check_net_weight(m_ip2_val_b, VALUE_LABELS)) return false;
+
 			return true;
 		}
 
@@ -141,8 +192,6 @@ std::pair<int, int> Network::load_leelaz_network(std::istream& wtfile) {
             if (linecount % 4 == 0) {
                 m_fwd_weights->m_conv_weights.emplace_back(weights);
             } else if (linecount % 4 == 1) {
-                // Redundant in our model, but they encode the
-                // number of outputs so we have to read them in.
                 m_fwd_weights->m_conv_biases.emplace_back(weights);
             } else if (linecount % 4 == 2) {
                 m_fwd_weights->m_batchnorm_means.emplace_back(weights);
@@ -151,45 +200,34 @@ std::pair<int, int> Network::load_leelaz_network(std::istream& wtfile) {
                 m_fwd_weights->m_batchnorm_stddevs.emplace_back(weights);
             }
         } else {
-            switch (linecount - plain_conv_wts) {
+		    switch (linecount - plain_conv_wts) {
                 case  0: m_fwd_weights->m_conv_pol_w = std::move(weights); break;
                 case  1: m_fwd_weights->m_conv_pol_b = std::move(weights); break;
-                case  2: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_bn_pol_w1)); break;
-                case  3: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_bn_pol_w2)); break;
-                case  4: if (weights.size() != OUTPUTS_POLICY
-                                               * NUM_INTERSECTIONS
-                                               * POTENTIAL_MOVES) {
-                             auto_printf("The weights file is not for %dx%d boards.\n",
-                                      BOARD_SIZE, BOARD_SIZE);
-                             return {0, 0};
-                         }
-                         std::copy(cbegin(weights), cend(weights),
-                                   begin(m_ip_pol_w)); break;
-                case  5: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_ip_pol_b)); break;
+                case  2: m_bn_pol_w1 = std::move(weights);break;
+                case  3: m_bn_pol_w2 = std::move(weights);break;
+                case  4: m_ip_pol_w = std::move(weights); break;
+                case  5: m_ip_pol_b = std::move(weights); break;
                 case  6: m_fwd_weights->m_conv_val_w = std::move(weights); break;
                 case  7: m_fwd_weights->m_conv_val_b = std::move(weights); break;
-                case  8: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_bn_val_w1)); break;
-                case  9: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_bn_val_w2)); break;
-                case 10: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_ip1_val_w)); break;
-                case 11: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_ip1_val_b)); break;
-                case 12: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_ip2_val_w)); break;
-                case 13: std::copy(cbegin(weights), cend(weights),
-                                   begin(m_ip2_val_b)); break;
-            }
+                case  8: m_bn_val_w1 = std::move(weights); break;
+                case  9: m_bn_val_w2 = std::move(weights); break;
+                case 10: m_ip1_val_w = std::move(weights); break;
+                case 11: m_ip1_val_b = std::move(weights); break;
+                case 12: m_ip2_val_w = std::move(weights); break;
+                case 13: m_ip2_val_b = std::move(weights); break;
+			}
+
         }
 		linecount++;
 
 	}
 	leelaz_process_bn_var(m_bn_pol_w2);
     leelaz_process_bn_var(m_bn_val_w2);
+	
+	if (!check_net_format(Networkfile_t::LEELAZ, channels, residual_blocks)){
+		m_fwd_weights.reset();
+		return {0, 0};
+	}
 
 	return {channels, residual_blocks};
 }
@@ -198,8 +236,6 @@ std::pair<int, int> Network::load_leelaz_network(std::istream& wtfile) {
 
 std::pair<int, int> Network::load_network_file(const std::string& filename, Networkfile_t file_type) {
 	
-	check_net_format(file_type);
-
 	auto gzhandle = gzopen(filename.c_str(), "rb");	
 	if (gzhandle == nullptr) {
         auto_printf("Could not open weights file: %s\n", filename.c_str());
@@ -247,6 +283,7 @@ std::pair<int, int> Network::load_network_file(const std::string& filename, Netw
 }
 
 void Network::init_winograd_transform(const int channels, const int residual_blocks) {
+	/*
 	auto weight_index = size_t{0};
 
     m_fwd_weights->m_conv_weights[weight_index] =
@@ -260,6 +297,7 @@ void Network::init_winograd_transform(const int channels, const int residual_blo
                                  channels, channels);
         weight_index++;
     }
+	*/
 }
 
 void Network::init_batchnorm_weights() {
@@ -282,10 +320,10 @@ void Network::init_batchnorm_weights() {
     }
 }
 
-std::unique_ptr<ForwardPipe>&& Network::init_net(int channels,
+std::unique_ptr<ForwardPipe>&& Network::init_net(int channels, int residual_blocks,
     std::unique_ptr<ForwardPipe>&& pipe) {
 
-    pipe->initialize(channels);
+    pipe->initialize(channels, residual_blocks, m_fwd_weights);
     pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 
     return std::move(pipe);
@@ -323,7 +361,7 @@ void Network::initialize(int playouts, const std::string & weightsfile, Networkf
 	init_winograd_transform(channels, residual_blocks);
 	init_batchnorm_weights();
 
-	m_forward = init_net(channels, std::make_unique<CPUPipe>());
+	m_forward = init_net(channels, residual_blocks, std::make_unique<CPUbackend>());
 	m_fwd_weights.reset();
 	auto_printf("Pushing Network is complete.\n");
 }
@@ -434,18 +472,18 @@ Network::Netresult Network::get_output_internal(
 
     m_forward->forward(input_data, policy_data, value_data);
 	
-	
+	using batchnorm = Batchnorm<NUM_INTERSECTIONS>;
     // Get the moves
-    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_POLICY, policy_data,
-        m_bn_pol_w1.data(), m_bn_pol_w2.data());
+    batchnorm::Forward(OUTPUTS_POLICY, policy_data,
+                       m_bn_pol_w1.data(), m_bn_pol_w2.data());
     const auto policy_out =
         innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
             policy_data, m_ip_pol_w, m_ip_pol_b);
-    const auto outputs = softmax(policy_out, cfg_softmax_temp);
+    const auto outputs = Activation::softmax(policy_out, cfg_softmax_temp);
 
     // Now get the value
-    batchnorm<NUM_INTERSECTIONS>(OUTPUTS_VALUE, value_data,
-        m_bn_val_w1.data(), m_bn_val_w2.data());
+    batchnorm::Forward(OUTPUTS_VALUE, value_data,
+                       m_bn_val_w1.data(), m_bn_val_w2.data());
     const auto winrate_data =
         innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
             value_data, m_ip1_val_w, m_ip1_val_b);
@@ -461,7 +499,7 @@ Network::Netresult Network::get_output_internal(
         const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
         result.policy[sym_idx] = outputs[idx];
     }
-
+	
     result.policy_pass = outputs[NUM_INTERSECTIONS];
     result.winrate[0] = winrate;
 	

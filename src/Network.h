@@ -72,10 +72,10 @@ public:
 private:
 	void init_winograd_transform(const int channels, const int residual_blocks);
 	void init_batchnorm_weights();
-	std::unique_ptr<ForwardPipe>&& init_net(int channels,
+	std::unique_ptr<ForwardPipe>&& init_net(int channels, int residual_blocks,
                                             std::unique_ptr<ForwardPipe>&& pipe);
 
-	bool check_net_format(Networkfile_t file_type);
+	bool check_net_format(Networkfile_t file_type, int channels, int blocks);
 
 	bool probe_cache(const GameState* const state, Network::Netresult& result);
 
@@ -100,8 +100,9 @@ private:
 
 	// Residual tower
     std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
-
+	
     // Policy head
+	/*
     std::array<float, OUTPUTS_POLICY> m_bn_pol_w1;
     std::array<float, OUTPUTS_POLICY> m_bn_pol_w2;
 
@@ -109,8 +110,17 @@ private:
                       * NUM_INTERSECTIONS
                       * POTENTIAL_MOVES> m_ip_pol_w;
     std::array<float, POTENTIAL_MOVES> m_ip_pol_b;
+	*/
+
+	std::vector<float> m_bn_pol_w1;
+	std::vector<float> m_bn_pol_w2;
+
+    std::vector<float> m_ip_pol_w;
+    std::vector<float> m_ip_pol_b;
+
 
     // Value head
+	/*
     std::array<float, OUTPUTS_VALUE> m_bn_val_w1;
     std::array<float, OUTPUTS_VALUE> m_bn_val_w2;
 
@@ -121,7 +131,16 @@ private:
 
     std::array<float, VALUE_LAYER> m_ip2_val_w;
     std::array<float, VALUE_LABELS> m_ip2_val_b;
+	*/
 
+	std::vector<float> m_bn_val_w1;
+    std::vector<float> m_bn_val_w2;
+
+    std::vector<float> m_ip1_val_w;
+    std::vector<float> m_ip1_val_b;
+
+    std::vector<float> m_ip2_val_w;
+    std::vector<float> m_ip2_val_b;
 
 };
 

@@ -8,7 +8,7 @@
 #include "config.h"
 #include "cfg.h"
 
-
+#include "Random.h"
 using namespace std;
 
 
@@ -34,9 +34,8 @@ void normal_loop() {
 int main(int argc, char** argv) {
 
 	gtp::gtp_init_all(argc, argv);
-
 	normal_loop();
-	
+
 	return 0;
 }
 

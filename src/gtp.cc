@@ -141,10 +141,10 @@ bool gtp::gtp_execute(std::string input, GameState & state) {
 		gtp_printf("\n");
 
 	} else if (cmd == "final_score") {
-		float ftmp = state.board.area_score(cfg_komi);
-        if (ftmp < -0.1) {
+		float ftmp = state.final_score();
+        if (ftmp < -0.1f) {
             gtp_printf("W+%3.1f", float(fabs(ftmp)));
-        } else if (ftmp > 0.1) {
+        } else if (ftmp > 0.1f) {
             gtp_printf("B+%3.1f", ftmp);
         } else {
             gtp_printf("0");
@@ -203,7 +203,7 @@ bool gtp::gtp_execute(std::string input, GameState & state) {
 		cmd_stream >> color;
 		int to_move;
 		if (cmd_stream.fail()) {
-			int move = search->think(Search::strategy_t::NN_UCT);
+			int move = search->think(Search::strategy_t::NN_DIRECT);
 			auto res = gtp_vertex_parser(move);
 			gtp_printf("%s\n", res.c_str());
 			state.play_move(move);

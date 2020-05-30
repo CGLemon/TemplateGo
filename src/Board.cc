@@ -221,7 +221,7 @@ void Board::reset_board(const int boardsize, const float komi) {
 }
 
 void Board::set_boardsize(int boardsize) {
-	if (boardsize > BOARD_SIZE || boardsize <= 0) {
+	if (boardsize > BOARD_SIZE || boardsize < MARCRO_MIN_BOARDSIZE) {
 		boardsize = BOARD_SIZE;
 	}
 	m_boardsize = boardsize;
@@ -334,11 +334,11 @@ std::string Board::columns_to_string(const int bsize) const {
 std::string Board::state_to_string(const vertex_t color, bool is_star) const {
 
 	auto res = std::string{};
-	color == BLACK  ? res += "x":
-	color == WHITE  ? res += "o" :
-	is_star == true ? res += "+" :
-	color == EMPTY  ? res += "." :
-	color == INVAL  ? res += "-" : res += "error";
+	color   == BLACK  ? res += "x":
+	color   == WHITE  ? res += "o" :
+	is_star == true   ? res += "+" :
+	color   == EMPTY  ? res += "." :
+	color   == INVAL  ? res += "-" : res += "error";
 	return res;
 }
 std::string Board::spcaces_to_string(const int times) const {
@@ -388,7 +388,7 @@ std::string Board::prisoners_to_string() const {
 	res += std::to_string(m_prisoners[BLACK]);
 	res += "stones\n";
 	res += "WHITE (O) has captured";
-	res += std::to_string(m_prisoners[BLACK]);
+	res += std::to_string(m_prisoners[WHITE]);
 	res += "stones\n";
 	return res;
 }
@@ -442,9 +442,8 @@ bool Board::is_simple_eye(const int vtx, const int color) const {
 }
 
 bool Board::is_real_eye(const int vtx, const int color) const {
-    bool ownsurrounded = is_simple_eye(vtx, color);
 
-    if (!ownsurrounded) {
+    if (!is_simple_eye(vtx, color)) {
         return false;
     }
 
@@ -640,12 +639,13 @@ int Board::update_board(const int vtx, const int color) {
 			}
 		}
 	} 
-
-	const int ori_prisoners = m_prisoners[color];
-	const int new_prisoners = ori_prisoners + captured_stones;
-	m_prisoners[color] = new_prisoners;
-	update_zobrist_pris(color, new_prisoners, ori_prisoners);
-
+	
+	if (captured_stones != 0) {
+		const int ori_prisoners = m_prisoners[color];
+		const int new_prisoners = ori_prisoners + captured_stones;
+		m_prisoners[color] = new_prisoners;
+		update_zobrist_pris(color, new_prisoners, ori_prisoners);
+	}
 
 	int lastvertex = m_empty[--m_empty_cnt];
     m_empty_idx[lastvertex] = m_empty_idx[vtx];
@@ -661,7 +661,6 @@ int Board::update_board(const int vtx, const int color) {
         return captured_vtx;
     }	
 
-
 	return NO_VERTEX;
 }
 
@@ -670,7 +669,7 @@ void Board::play_move(const int vtx) {
 }
  
 void Board::play_move(const int vtx, const int color) {
-	assert(Board::RESIGN);
+	assert(vtx != Board::RESIGN);
 	const int ori_komove = m_komove;
 	if (vtx == PASS) {
 		increment_passes();
@@ -821,5 +820,3 @@ int Board::get_passes() const {
 int Board::get_movenum() const {
 	return m_movenum;
 }
-
-

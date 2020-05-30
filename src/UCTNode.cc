@@ -295,7 +295,7 @@ float UCTNode::get_raw_evaluation(int color) const {
 }
 
 float UCTNode::get_accumulated_evals() const {
-	return  m_accumulated_evals;
+	return m_accumulated_evals;
 }
 
 int UCTNode::get_vertex() const {
@@ -311,6 +311,7 @@ void UCTNode::increment_virtual_loss() {
 
 void UCTNode::decrement_virtual_loss() {
 	m_virtual_loss -= VIRTUAL_LOSS_COUNT;
+	assert(m_virtual_loss >= 0);
 }
 
 

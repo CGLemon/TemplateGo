@@ -31,8 +31,6 @@ void Utils::stream_printf(const char *fmt, ...) {
 	if (cfg_logfile_stream) {
 		std::lock_guard<std::mutex> lock(IOmutex);
 		vfprintf(cfg_logfile_stream, fmt, ap);
-	} else {
-    	vfprintf(stdout, fmt, ap);
 	}
     va_end(ap);
 }

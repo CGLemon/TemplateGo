@@ -32,10 +32,15 @@ struct ForwardPipeWeights {
     std::vector<std::vector<float>> m_batchnorm_means;
     std::vector<std::vector<float>> m_batchnorm_stddevs;
 
+	std::vector<std::vector<float>> m_batchnorm_weights;
+	std::vector<std::vector<float>> m_batchnorm_biases;
+
+
     // Policy head
     std::vector<float> m_conv_pol_w;
     std::vector<float> m_conv_pol_b;
-
+	
+	// Value head
     std::vector<float> m_conv_val_w;
     std::vector<float> m_conv_val_b;
 };
@@ -45,7 +50,8 @@ public:
     
     virtual ~ForwardPipe() = default;
 
-    virtual void initialize(const int channels) = 0;
+    virtual void initialize(const int channels, int residual_blocks,
+                              std::shared_ptr<ForwardPipeWeights> weights) = 0;
     virtual bool needs_autodetect() { return false; };
     virtual void forward(const std::vector<float>& input,
                          std::vector<float>& output_pol,
