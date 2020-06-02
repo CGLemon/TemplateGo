@@ -384,12 +384,12 @@ std::string Board::board_to_string(const int lastmove) const {
 
 std::string Board::prisoners_to_string() const {
 	auto res = std::string{};
-	res += "BLACK (X) has captured";
+	res += "BLACK (X) has captured ";
 	res += std::to_string(m_prisoners[BLACK]);
-	res += "stones\n";
-	res += "WHITE (O) has captured";
+	res += " stones\n";
+	res += "WHITE (O) has captured ";
 	res += std::to_string(m_prisoners[WHITE]);
-	res += "stones\n";
+	res += " stones\n";
 	return res;
 }
 
@@ -723,7 +723,7 @@ bool Board::is_legal(const int vtx, const int color,
 	return true;
 }
 
-int Board::calc_reach_color(int color) const {
+int Board::calc_reach_color(int color, int spread_color, std::shared_ptr<std::vector<bool>> bd_, bool is_territory) const {
 	assert(color == BLACK || color == WHITE);
     auto reachable = 0;
     auto bd = std::vector<bool>(m_numvertices, false);

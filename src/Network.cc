@@ -32,19 +32,20 @@
 #include "Utils.h"
 #include "NetPipe.h"
 #include "CPUbackend.h"
-#include "blas/CPUblas.h"
+#include "blas/CPULayers.h"
 #include "GameState.h"
 #include "Board.h"
 #include "cfg.h"
 #include "Random.h"
 
-#ifndef USE_BLAS
+#ifdef USE_EIGEN
 #include <Eigen/Dense>
 #endif
 
 #ifdef USE_MKL
 #include <mkl.h>
 #endif
+
 #ifdef USE_OPENBLAS
 #include <cblas.h>
 #endif
@@ -331,7 +332,7 @@ std::unique_ptr<ForwardPipe>&& Network::init_net(int channels, int residual_bloc
 
 
 void Network::initialize(int playouts, const std::string & weightsfile, Networkfile_t file_type) {
-	#ifdef USE_BLAS
+
 	#ifndef __APPLE__
 	#ifdef USE_OPENBLAS
 		openblas_set_num_threads(1);
@@ -345,7 +346,8 @@ void Network::initialize(int playouts, const std::string & weightsfile, Networkf
 		auto_printf("BLAS core: MKL %s\n", Version.Processor);
 	#endif
 	#endif
-	#else
+
+	#ifdef USE_EIGEN
 		auto_printf("BLAS Core: built-in Eigen %d.%d.%d library.\n",
 		         EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
 	#endif
@@ -472,23 +474,28 @@ Network::Netresult Network::get_output_internal(
 
     m_forward->forward(input_data, policy_data, value_data);
 	
-	using batchnorm = Batchnorm<NUM_INTERSECTIONS>;
+	using batchnorm = Batchnorm;
+	using fullyconnect = FullyConnect;
     // Get the moves
     batchnorm::Forward(OUTPUTS_POLICY, policy_data,
                        m_bn_pol_w1.data(), m_bn_pol_w2.data());
-    const auto policy_out =
-        innerproduct<OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES, false>(
-            policy_data, m_ip_pol_w, m_ip_pol_b);
+	
+	std::vector<float> policy_out(POTENTIAL_MOVES);
+	std::vector<float> winrate_data(VALUE_LAYER);
+	std::vector<float> winrate_out(VALUE_LABELS);
+
+    
+    fullyconnect::Forward(OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES,
+                          policy_data, m_ip_pol_w, m_ip_pol_b, policy_out, false);
     const auto outputs = Activation::softmax(policy_out, cfg_softmax_temp);
 
     // Now get the value
     batchnorm::Forward(OUTPUTS_VALUE, value_data,
                        m_bn_val_w1.data(), m_bn_val_w2.data());
-    const auto winrate_data =
-        innerproduct<OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER, true>(
-            value_data, m_ip1_val_w, m_ip1_val_b);
-    const auto winrate_out =
-        innerproduct<VALUE_LAYER, 1, false>(winrate_data, m_ip2_val_w, m_ip2_val_b);
+    fullyconnect::Forward(OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER,
+                          value_data, m_ip1_val_w, m_ip1_val_b, winrate_data, true);
+    fullyconnect::Forward(VALUE_LAYER, VALUE_LABELS, winrate_data, m_ip2_val_w, m_ip2_val_b,
+                          winrate_out, false);
 
     // Map TanH output range [-1..1] to [0..1] range
     const auto winrate = (1.0f + std::tanh(winrate_out[0])) / 2.0f;

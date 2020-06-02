@@ -1,5 +1,4 @@
 #include "CUDAbackend.h"
-#include "cuda/CudaLayers.h"
 
 void CUDAbackend::initialize(const int channels, int residual_blocks,
                         std::shared_ptr<ForwardPipeWeights> weights) {

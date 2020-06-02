@@ -54,3 +54,11 @@ void Utils::gtp_fail_printf(const char *fmt, ...) {
 	fprintf(stdout, "\n");
 	va_end(ap);
 }
+
+Utils::Exception::Exception(const std::string& what) : std::runtime_error(what) {
+	std::string log = "Exception: ";
+	log += what;
+	auto_printf("%s",log.c_str());
+	stream_printf("%s",log.c_str());
+}
+

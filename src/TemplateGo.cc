@@ -8,7 +8,7 @@
 #include "config.h"
 #include "cfg.h"
 
-#include "Random.h"
+#include "cuda/CUDACommon.h"
 using namespace std;
 
 
@@ -35,7 +35,8 @@ int main(int argc, char** argv) {
 
 	gtp::gtp_init_all(argc, argv);
 	normal_loop();
-
+	
+		
 	return 0;
 }
 

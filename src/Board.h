@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <string>
+#include <memory>
 
 #include "config.h"
 #include "Zobrist.h"
@@ -38,6 +39,14 @@ public:
 	enum vertex_t : std::uint8_t {
 		BLACK = BLACK_NUMBER, WHITE = WHITE_NUMBER, EMPTY = EMPTY_NUMBER, INVAL = INVAL_NUMBER
 	};
+
+	enum territory_t : std::uint8_t {
+        B_STONE = 0, W_STONE = 1, EMPTY_I = 2, INVAL_I = 3,
+        DAME = 4,
+		SEKI = 5  , SEKI_EYE = 6,
+        W_TERR = 7, B_TERR = 8
+    };
+
 
 	static constexpr int NO_VERTEX = 0;
 	static constexpr int PASS = NUM_VERTICES+1;
@@ -117,7 +126,7 @@ public:
                     std::uint64_t* super_ko_history = nullptr, avoid_t avoid = avoid_t::NONE) const;
 	bool is_avoid_to_move(avoid_t, const int vtx, const int color) const;
 
-	int calc_reach_color(int color) const;
+	int calc_reach_color(int color, int spread_color = 0, std::shared_ptr<std::vector<bool>> bd = nullptr, bool is_territory = false) const;
 	float area_score(float komi) const;
 private:
 	class BitBoard {
@@ -152,6 +161,7 @@ private:
 	std::array<std::uint16_t, NUM_VERTICES> m_empty;
 	std::array<std::uint16_t, NUM_VERTICES> m_empty_idx;
 
+	std::array<territory_t, NUM_VERTICES> m_territory;
 	Chain m_string;
 
 	std::array<int, 2> m_prisoners;
