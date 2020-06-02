@@ -723,42 +723,154 @@ bool Board::is_legal(const int vtx, const int color,
 	return true;
 }
 
-int Board::calc_reach_color(int color, int spread_color, std::shared_ptr<std::vector<bool>> bd_, bool is_territory) const {
-	assert(color == BLACK || color == WHITE);
-    auto reachable = 0;
-    auto bd = std::vector<bool>(m_numvertices, false);
-    auto open = std::queue<int>();
-    for (auto i = 0; i < m_boardsize; i++) {
-        for (auto j = 0; j < m_boardsize; j++) {
-            auto vertex = get_vertex(i, j);
-            if (m_state[vertex] == color) {
-                reachable++;
-                bd[vertex] = true;
-                open.push(vertex);
-            }
-        }
-    }
-    while (!open.empty()) {
-        /* colored field, spread */
-        auto vertex = open.front();
-        open.pop();
-
-        for (auto k = 0; k < 4; k++) {
-            auto neighbor = vertex + m_dirs[k];
-            if (!bd[neighbor] && m_state[neighbor] == EMPTY) {
-                reachable++;
-                bd[neighbor] = true;
-                open.push(neighbor);
-            }
-        }
-    }
-    return reachable;
+int Board::calc_reach_color(int color) const {
+	auto bd = std::vector<bool>(m_numvertices, false);
+	return calc_reach_color(color, EMPTY, bd, false);
 }
 
-float Board::area_score(float komi) const {
-    float white = static_cast<float>(calc_reach_color(WHITE));
-    float black = static_cast<float>(calc_reach_color(BLACK));
-    return black - white - komi;
+
+int Board::calc_reach_color(int color, int spread_color, std::vector<bool> & bd, bool is_territory) const {
+	printf("color : %d\n", color);
+	bd.resize(m_numvertices);
+	int reachable = 0;
+	auto open = std::queue<int>();
+	for (int y = 0; y < m_boardsize; y++) {
+		for (int x = 0; x < m_boardsize; x++) {
+			const int vertex = get_vertex(x, y);
+			const int peek = is_territory ? int(m_territory[vertex]) : int(m_state[vertex]);
+			if (peek == color) {
+				printf("peek vertex : %d\n", vertex);
+				reachable++;
+				bd[vertex] = true;
+				open.push(vertex);
+			} else {
+				bd[vertex] = false;
+			}
+		}
+	}
+	while (!open.empty()) {
+		/* colored field, spread */
+		auto vertex = open.front();
+		open.pop();
+
+		for (int k = 0; k < 4; k++) {
+			const int neighbor = vertex + m_dirs[k];
+			const int peek = is_territory ? int(m_territory[neighbor]) : int(m_state[neighbor]);
+			if (!bd[neighbor] && peek == spread_color) {
+				reachable++;
+				bd[neighbor] = true;
+				open.push(neighbor);
+			}
+		}
+	}
+	return reachable;
+}
+
+float Board::area_score(float komi, Board::rule_t rule) {
+	if (rule == rule_t::Tromp_Taylor) {
+    	float white = static_cast<float>(calc_reach_color(WHITE));
+    	float black = static_cast<float>(calc_reach_color(BLACK));
+		return black - white - komi;
+	} else if (rule == rule_t::Jappanese) {
+		auto terri = compute_territory();
+		float white = static_cast<float>(terri.second + m_prisoners[WHITE]);
+		float black = static_cast<float>(terri.first + m_prisoners[BLACK]);
+		
+		return black - white - komi;
+	}
+
+    return 0.0f;
+}
+
+
+void Board::find_dame() {
+	auto black = std::vector<bool>(m_numvertices, false);
+	auto white = std::vector<bool>(m_numvertices, false);
+
+	calc_reach_color(BLACK, EMPTY, black, false);
+	calc_reach_color(WHITE, EMPTY, white, false);
+
+	for (int y = 0; y < m_boardsize; ++y) {
+		for (int x = 0; x < m_boardsize; ++x) {
+			int vertex = get_vertex(x, y);
+			if (black[vertex] && white[vertex]) {
+				m_territory[vertex] = DAME;
+			}
+		}
+	}
+}
+
+void Board::find_seki() {
+	auto black_seki = std::vector<bool>(m_numvertices, false);
+	auto white_seki = std::vector<bool>(m_numvertices, false);
+
+	calc_reach_color(DAME, B_STONE, black_seki, true);
+	calc_reach_color(DAME, W_STONE, white_seki, true);
+
+	for (int y = 0; y < m_boardsize; ++y) {
+		for (int x = 0; x < m_boardsize; ++x) {
+			int vertex = get_vertex(x, y);
+			if ((black_seki[vertex] || white_seki[vertex]) && m_territory[vertex] != DAME ) {
+				m_territory[vertex] = SEKI;
+			}
+		}
+	}
+}
+
+std::pair<int,int> Board::find_territory() {
+	int b_terr_count = 0;
+	int w_terr_count = 0;
+
+	auto seki_eye    = std::vector<bool>(m_numvertices, false);
+	auto b_territory = std::vector<bool>(m_numvertices, false);
+	auto w_territory = std::vector<bool>(m_numvertices, false);
+
+	calc_reach_color(SEKI   , EMPTY_I, seki_eye   , true);
+	calc_reach_color(B_STONE, EMPTY_I, b_territory, true);
+	calc_reach_color(W_STONE, EMPTY_I, w_territory, true);
+
+	for (int y = 0; y < m_boardsize; ++y) {
+		for (int x = 0; x < m_boardsize; ++x) {
+            int vertex = get_vertex(x, y);
+			if (seki_eye[vertex] && m_territory[vertex] != SEKI) {
+				m_territory[vertex] = SEKI_EYE;
+			} else if (b_territory[vertex] && m_territory[vertex] != B_STONE) {
+				m_territory[vertex] = B_TERR;
+				b_terr_count++;
+			} else if (w_territory[vertex] && m_territory[vertex] != W_STONE) {
+				m_territory[vertex] = W_TERR;
+				w_terr_count++;
+			}
+        }
+    }
+    return std::make_pair(b_terr_count, w_terr_count);
+}
+
+std::pair<int,int> Board::compute_territory() {
+	reset_territory();
+	find_dame();
+	find_seki();
+	return find_territory();
+}
+
+
+void Board::reset_territory() {
+	for (int vertex = 0 ; vertex < m_numvertices ; vertex++) {
+		switch(m_state[vertex]) {
+		case BLACK:
+			m_territory[vertex] = B_STONE;
+			break;
+		case WHITE:
+			m_territory[vertex] = W_STONE;
+			break;
+		case EMPTY:
+			m_territory[vertex] = EMPTY_I;
+			break;
+		case INVAL:
+			m_territory[vertex] = INVAL_I;
+			break;
+		}
+	}
 }
 
 bool Board::is_avoid_to_move(Board::avoid_t avoid, const int vtx, const int color) const {

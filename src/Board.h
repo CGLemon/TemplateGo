@@ -25,12 +25,18 @@
 #define BLACK_EYE_MASK (4 * (1 << BLACK_NBR_SHIFT))
 #define WHITE_EYE_MASK (4 * (1 << WHITE_NBR_SHIFT))
 
-
 static std::array<int ,2> s_eyemask = {BLACK_EYE_MASK, WHITE_EYE_MASK};
 
 
+/*
+/ TODO: 增加征子的判斷（ 為了支援 KataGo ）
+*/
+
 class Board {
 public:
+	enum class rule_t {
+		Tromp_Taylor, Jappanese
+	};
 
 	enum class avoid_t {
 		NONE, REAL_EYE
@@ -68,7 +74,10 @@ public:
 	void set_to_move(int color);
 	void exchange_to_move();
 
-
+	/*
+	/ =====================================================================
+	/ 顯示目前的盤面
+	*/
 	bool is_star(const int x, const int y) const;
 	std::string board_to_string(const int lastmove = NO_VERTEX) const;
 	std::string state_to_string(const vertex_t color, bool is_star) const;
@@ -78,9 +87,17 @@ public:
 	std::string hash_to_string() const;
 	void text_display();
 	void display_chain();
+	/*
+	  =====================================================================
+	*/	
 
+
+	/*
+	/ =====================================================================
+	/ 獲取棋盤資訊
+	*/
 	std::pair<int, int> get_symmetry(const int x, const int y,
-										 const int symmetry, const int boardsize);
+	                                 const int symmetry, const int boardsize);
 	int get_to_move() const;
 	int get_last_move() const;
 	int get_vertex(const int x, const int y) const;
@@ -96,19 +113,30 @@ public:
 
  	std::uint64_t get_ko_hash() const;
 	std::uint64_t get_hash() const;
+	/*
+	  =====================================================================
+	*/
+
 
 	std::uint64_t calc_hash(int komove, int sym = IDENTITY_SYMMETRY);
 	std::uint64_t calc_ko_hash(int sym = IDENTITY_SYMMETRY);
 
-
 	void set_passes(int val);
 	void increment_passes();
 
+	/*
+	/ =====================================================================
+	/ 更新雜湊值
+	*/
 	void update_zobrist(const int vtx, const int new_color, const int old_color);
 	void update_zobrist_pris(const int color, const int new_pris, const int old_pris);
 	void update_zobrist_tomove(const int new_color, const int old_color);
 	void update_zobrist_ko(const int new_komove, const int old_komove);
 	void update_zobrist_pass(const int new_pass, const int old_pass);
+	/*
+	  =====================================================================
+	*/
+
 
 	int count_pliberties(const int vtx) const;
 	bool is_real_eye(const int vtx, const int color) const;
@@ -125,10 +153,25 @@ public:
 	bool is_legal(const int vtx, const int color, 
                     std::uint64_t* super_ko_history = nullptr, avoid_t avoid = avoid_t::NONE) const;
 	bool is_avoid_to_move(avoid_t, const int vtx, const int color) const;
+	
+	int calc_reach_color(int color) const;
+	int calc_reach_color(int color, int spread_color, std::vector<bool> & bd, bool is_territory) const;
+	float area_score(float komi, rule_t = rule_t::Tromp_Taylor);
 
-	int calc_reach_color(int color, int spread_color = 0, std::shared_ptr<std::vector<bool>> bd = nullptr, bool is_territory = false) const;
-	float area_score(float komi) const;
+
+	/*
+	/ TODO: seki 在非常特殊的情況下會搜尋失敗
+	*/
+	void find_dame();
+	void find_seki();
+	void reset_territory();
+	std::pair<int,int> find_territory();
+	std::pair<int,int> compute_territory();
+
 private:
+	/*
+	/ TODO: BitBoard 導入 patten 並快速比對
+	*/
 	class BitBoard {
 	public:
 		BitBoard() = default;
@@ -144,38 +187,41 @@ private:
 		std::uint64_t make_bit(const int idx);
 
 	};
-
+	/*
+	/ Chain: 棋串的資料結構 
+	/        棋串由單個棋子組成
+	*/
 	struct Chain {
-		std::array<std::uint16_t, NUM_VERTICES+1> next;
-		std::array<std::uint16_t, NUM_VERTICES+1> parent;
-		std::array<std::uint16_t, NUM_VERTICES+1> libs;
-		std::array<std::uint16_t, NUM_VERTICES+1> stones;
+		std::array<std::uint16_t, NUM_VERTICES+1> next;    // next:   棋子下一個連接的棋子
+		std::array<std::uint16_t, NUM_VERTICES+1> parent;  // parent: 棋串的編號，同一個棋串編號相同
+		std::array<std::uint16_t, NUM_VERTICES+1> libs;    // libs:   棋串的氣
+		std::array<std::uint16_t, NUM_VERTICES+1> stones;  // stones: 棋串飽含的棋子數目
 		void reset_chain();
 		void add_stone(const int vtx, const int lib);
 		void display_chain();
 	};
 
-	std::array<BitBoard     , 2>            m_bitstate;
-	std::array<vertex_t     , NUM_VERTICES> m_state;
-	std::array<std::uint16_t, NUM_VERTICES> m_neighbours;
-	std::array<std::uint16_t, NUM_VERTICES> m_empty;
-	std::array<std::uint16_t, NUM_VERTICES> m_empty_idx;
+	std::array<BitBoard     , 2>            m_bitstate;    // 比特棋盤，目前無用
+	std::array<vertex_t     , NUM_VERTICES> m_state;       // 棋盤狀態，包含黑子、白子、空白
+	std::array<std::uint16_t, NUM_VERTICES> m_neighbours;  // 四周的黑棋個數、白棋個數、空白個數，Leela Zero 獨有的資料型態 
+	std::array<std::uint16_t, NUM_VERTICES> m_empty;       
+	std::array<std::uint16_t, NUM_VERTICES> m_empty_idx;    
 
-	std::array<territory_t, NUM_VERTICES> m_territory;
-	Chain m_string;
+	std::array<territory_t, NUM_VERTICES> m_territory;     // 用於日式計地規則
+	Chain m_string; // 棋串
 
-	std::array<int, 2> m_prisoners;
+	std::array<int, 2> m_prisoners; // 提子數
 
-	std::uint64_t m_hash;
-	std::uint64_t m_ko_hash;
+	std::uint64_t m_hash;    // 雜湊值，考慮棋盤狀態、提子數、下一手為黑棋或白棋、打劫和虛手數目
+	std::uint64_t m_ko_hash; // 雜湊值，僅考慮棋盤狀態，為了避免相同盤面產生
 
-	int m_tomove;	
-	int m_letterboxsize;
+	int m_tomove;	      // 下一手為黑棋或白棋
+	int m_letterboxsize;  
 	int m_numvertices;
-	int m_intersections;
-	int m_boardsize;
-	int m_lastmove;
-	int m_komove;
+	int m_intersections;  
+	int m_boardsize;      // 棋盤大小
+	int m_lastmove;       // 上一手下過的位置
+	int m_komove;         // 打劫的位置
 	int m_empty_cnt;
 	int m_passes;
 	int m_movenum;

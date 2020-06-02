@@ -1,4 +1,3 @@
-
 #ifndef ZOBRIST_H_INCLUDE
 #define ZOBRIST_H_INCLUDE
 

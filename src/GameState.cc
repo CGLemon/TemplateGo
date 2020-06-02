@@ -88,7 +88,9 @@ bool GameState::play_textmove(std::string input) {
 				int cmd_size = cmd.size();
 				std::string y_str;
 				for (int i = 1; i < cmd_size; ++i) {
-					y_str += cmd[i];
+					char alpha = cmd[i];
+					if (!(alpha >= '0' && alpha <= '9')) return false;
+					y_str += alpha;
 				}
 				if (y_str.size() == 0) {
 					return false;
@@ -102,7 +104,9 @@ bool GameState::play_textmove(std::string input) {
 				int cmd_size = cmd.size();
 				std::string y_str;
 				for (int i = 1; i < cmd_size; ++i) {
-					y_str += cmd[i];
+					char alpha = cmd[i];
+					if (!(alpha >= '0' && alpha <= '9')) return false;
+					y_str += alpha;
 				}
 				if (y_str.size() == 0) {
 					return false;
@@ -151,9 +155,8 @@ std::string GameState::display_to_string() const {
 	return res;
 }
 
-float GameState::final_score() const {
-	return board.area_score(board.get_komi());
-
+float GameState::final_score(Board::rule_t rule) {
+	return board.area_score(board.get_komi(), rule);
 }
 
 const std::shared_ptr<Board> GameState::get_past_board(int moves_ago) const {

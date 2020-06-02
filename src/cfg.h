@@ -31,7 +31,7 @@ extern int cfg_byostones;
 
 
 extern int cfg_boardsize;
-extern int cfg_komi;
+extern float cfg_komi;
 extern int cfg_playouts;
 extern float cfg_allow_pass_ratio;
 

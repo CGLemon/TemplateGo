@@ -12,7 +12,10 @@
 std::vector<float> winograd_transform_f(const std::vector<float>& f,
                                                    const int outputs, const int channels);
 
-
+/*
+/ =====================================================================
+/ winograd_convolve3: 快速卷積算法，只對 kernel size = 3 有效
+*/
 class winograd_convolve3 {
 public:
 	static void Forward(const int outputs,
@@ -44,6 +47,10 @@ private:
 };
 
 
+/*
+/ =====================================================================
+/ Convolve: 卷積算法
+*/
 class Convolve {
 public:
 	static void Forward(const size_t filter_size,
@@ -53,7 +60,10 @@ public:
 		                const std::vector<float>& biases,
 		                std::vector<float>& output);
 private:
-
+	/*
+	/ =====================================================================
+	/ im2col: 將捲積算法變成線性乘法，可以有效增加捲積效率
+	*/
 	static void im2col(const size_t filter_size,
                        const int channels,
                        const std::vector<float>& input,
@@ -64,6 +74,11 @@ private:
 	static constexpr int spatial_size = width * height;
 };
 
+
+/*
+/ =====================================================================
+/ Convolve_1: 卷積算法 kernel size = 1 的特殊情況
+*/
 class Convolve_1 {
 public:
 	static void Forward(const size_t outputs, 
@@ -77,6 +92,12 @@ private:
 	static constexpr int spatial_size = width * height; 
 };
 
+
+
+/*
+/ =====================================================================
+/ Activation: 激發函數
+*/
 class Activation {
 public:
 	static std::vector<float> softmax(const std::vector<float>& input,
@@ -85,6 +106,11 @@ public:
 
 };
 
+
+/*
+/ =====================================================================
+/ Batchnorm
+*/
 class Batchnorm {
 public:
 	static void Forward(const size_t channels,
@@ -97,7 +123,12 @@ private:
 };
 
 
-
+/*
+/ =====================================================================
+/ FullyConnect 全連接層
+/ inputs: input size
+/ outputs: output size 
+*/
 class FullyConnect {
 public:
 	static void Forward(const int inputs,

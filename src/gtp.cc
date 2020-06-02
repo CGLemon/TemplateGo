@@ -5,11 +5,19 @@
 #include "Utils.h"
 #include "Search.h"
 #include "Evaluation.h"
+#include "Board.h"
 
 /*
     A list of all valid GTP2 commands is defined here:
     https://www.lysator.liu.se/~gunnar/gtp/gtp2-spec-draft2/gtp2-spec.html
     GTP is meant to be used between programs. It's not a human interface.
+
+
+
+	https://www.lysator.liu.se/~gunnar/gtp/gtp2-spec-draft2/gtp2-spec.html
+	包含一系列 GTP2 的協議 
+	GTP 可以讓程式相互溝通，這不是為人設置的界面
+
 */
 using namespace Utils;
 
@@ -69,7 +77,7 @@ bool gtp::normal_execute(std::string input, GameState & state) {
 	cmd_stream >> cmd;
 
 	if (cmd == "play") {
-
+		
 		std::string move_string, color, vertex;
 		int to_move = state.board.get_to_move();
 		if (to_move == Board::BLACK) {
@@ -81,6 +89,7 @@ bool gtp::normal_execute(std::string input, GameState & state) {
 		}
 		
 		cmd_stream >> vertex;
+
 		move_string = color + " " + vertex;
 		
 		if (!cmd_stream.fail()) {
@@ -141,7 +150,16 @@ bool gtp::gtp_execute(std::string input, GameState & state) {
 		gtp_printf("\n");
 
 	} else if (cmd == "final_score") {
-		float ftmp = state.final_score();
+		auto rule = std::string{};
+		cmd_stream >> rule;
+		float ftmp;
+		if (rule == "jappenese") {
+			ftmp = state.final_score(Board::rule_t::Jappanese);
+		} else if (rule == "Tromp-Taylor") {
+		 	ftmp = state.final_score(Board::rule_t::Tromp_Taylor);
+		} else {
+			ftmp = state.final_score();
+		}
         if (ftmp < -0.1f) {
             gtp_printf("W+%3.1f", float(fabs(ftmp)));
         } else if (ftmp > 0.1f) {
@@ -178,7 +196,7 @@ bool gtp::gtp_execute(std::string input, GameState & state) {
 
 	} else if (cmd == "play") {
 		std::string move_string, color, vertex;
-
+		printf("here\n");
 		cmd_stream >> color >> vertex;
 		move_string = color + " " + vertex;
 		

@@ -29,9 +29,9 @@ int cfg_byotime;
 int cfg_byostones;
 
 int cfg_boardsize;
-int cfg_komi;
+float cfg_komi;
 int cfg_playouts;
-float cfg_allow_pass_ratio = 0.0f;
+float cfg_allow_pass_ratio;
 
 void arg_parser(int argc, char** argv) {
 	

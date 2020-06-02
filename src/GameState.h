@@ -30,14 +30,14 @@ public:
 	void set_to_move(int color);
 	void exchange_to_move();
 
-	float final_score() const;
+	float final_score(Board::rule_t rule = Board::rule_t::Tromp_Taylor);
+
 private:
 
 	std::vector<std::shared_ptr<Board>> game_history;
 	std::vector<std::uint64_t> ko_hash_history;
 	int m_resigned;
 };
-
 
 
 #endif
