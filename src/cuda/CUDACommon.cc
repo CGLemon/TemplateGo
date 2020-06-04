@@ -6,7 +6,7 @@
 #include <cstdlib>
 #include <iostream>
 
-void check_error(cudaError_t status) {
+void ReportCUDAErrors(cudaError_t status) {
     //cudaDeviceSynchronize();
 	cudaError_t status2 = cudaGetLastError();
 	if (status != cudaSuccess)

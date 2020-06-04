@@ -160,17 +160,6 @@ void blas::fixed_gemm(
 	const float beta,
 	std::vector<float>& C, const int ldc
 ) {
-    // Weight shape (output, input, filter_size, filter_size)
-    // 96 18 3 3
-    // C←αAB + βC
-    // outputs[96,19x19] = weights[96,18x3x3] x col[18x3x3,19x19]
-    // M Number of rows in matrices A and C.
-    // N Number of columns in matrices B and C.
-    // K Number of columns in matrix A; number of rows in matrix B.
-    // lda The size of the first dimention of matrix A; if you are
-    // passing a matrix A[m][n], the value should be m.
-    //    cblas_sgemm(CblasRowMajor, TransA, TransB, M, N, K, alpha, A, lda, B,
-    //                ldb, beta, C, N);
 
 #ifndef USE_BLAS
 	gemm_cpu(false, false,

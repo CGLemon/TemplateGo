@@ -351,7 +351,7 @@ void Convolve::im2col(const size_t filter_size,
     const float* data_im = input.data();
     float* data_col = output.data();
 
-    for (int channel = channels; channel--; data_im += NUM_INTERSECTIONS) {
+    for (int channel = channels; channel--; data_im += spatial_size) {
         for (unsigned int kernel_row = 0; kernel_row < filter_size; kernel_row++) {
             for (unsigned int kernel_col = 0; kernel_col < filter_size; kernel_col++) {
                 int input_row = -pad + kernel_row;
@@ -390,6 +390,19 @@ void Convolve::Forward(const size_t filter_size,
     const int input_channels = weights.size() / (biases.size() * filter_len);
     const int filter_dim = filter_len * input_channels;
     assert(outputs * spatial_size == output.size());
+
+    // Weight shape (output, input, filter_size, filter_size)
+    // 96 18 3 3
+    // C←αAB + βC
+    // outputs[96,19x19] = weights[96,18x3x3] x col[18x3x3,19x19]
+    // M Number of rows in matrices A and C.
+    // N Number of columns in matrices B and C.
+    // K Number of columns in matrix A; number of rows in matrix B.
+    // lda The size of the first dimention of matrix A; if you are
+    // passing a matrix A[m][n], the value should be m.
+    //    cblas_sgemm(CblasRowMajor, TransA, TransB, M, N, K, alpha, A, lda, B,
+    //                ldb, beta, C, N);
+
 
     std::vector<float> col(filter_dim * width * height);
 	

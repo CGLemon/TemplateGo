@@ -10,7 +10,7 @@
 
 #include "cuda/CUDACommon.h"
 #include "cuda/CUDAKernel.h"
-
+#include "sstream"
 using namespace std;
 
 void normal_loop() {
@@ -32,6 +32,10 @@ int main(int argc, char** argv) {
 
 	gtp::gtp_init_all(argc, argv);
 	normal_loop();
+	
+	
+
+	 
 
 	return 0;
 }

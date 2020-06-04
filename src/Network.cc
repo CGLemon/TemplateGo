@@ -28,7 +28,11 @@
 */
 
 #include "Network.h"
+
+#ifdef USE_ZLIB
 #include "zlib.h"
+#endif
+
 #include "Utils.h"
 #include "NetPipe.h"
 #include "CPUbackend.h"
@@ -60,7 +64,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
+#include <fstream>
+#include <iostream>
 using namespace Utils;
 
 bool check_net_weight(std::vector<float>& weights, int count) {
@@ -142,6 +147,7 @@ void leelaz_process_bn_var(container& weights) {
         w = 1.0f / std::sqrt(w + epsilon);
     }
 }
+
 
 std::pair<int, int> Network::load_leelaz_network(std::istream& wtfile) {
 
@@ -234,16 +240,17 @@ std::pair<int, int> Network::load_leelaz_network(std::istream& wtfile) {
 }
 
 
-
 std::pair<int, int> Network::load_network_file(const std::string& filename, Networkfile_t file_type) {
 	
+	auto buffer = std::stringstream{};
+
+	#ifdef USE_ZLIB
 	auto gzhandle = gzopen(filename.c_str(), "rb");	
 	if (gzhandle == nullptr) {
         auto_printf("Could not open weights file: %s\n", filename.c_str());
         return {0, 0};
     }
-
-	auto buffer = std::stringstream{};
+	
     constexpr auto chunkBufferSize = 64 * 1024;
     std::vector<char> chunkBuffer(chunkBufferSize);
 	
@@ -259,7 +266,17 @@ std::pair<int, int> Network::load_network_file(const std::string& filename, Netw
         buffer.write(chunkBuffer.data(), bytesRead);
     }
     gzclose(gzhandle);
-	
+	#else
+
+	std::ifstream weights_file(filename.c_str());
+	auto stream_line = std::string{};
+	while(std::getline(weights_file, stream_line)) {
+		buffer << stream_line << std::endl;
+	}
+	weights_file.close();
+
+	#endif
+
 	auto line = std::string{};
 	if (file_type == Networkfile_t::LEELAZ) {
 		int format_version = -1;

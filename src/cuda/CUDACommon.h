@@ -8,7 +8,7 @@
 
 #define KBLOCKSIZE 512
 
-void check_error(cudaError_t status);
+void ReportCUDAErrors(cudaError_t status);
 
 inline static int DivUp(int a, int b) { return (a + b - 1) / b; }
 

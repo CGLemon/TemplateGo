@@ -21,7 +21,7 @@
 
 class blas {
 public:
-	static void	fixed_gemm(const int M, const int N, const int K,
+	static void fixed_gemm(const int M, const int N, const int K,
 	                       const float alpha, 
 	                       const std::vector<float>& A, const int lda,
 	                       const std::vector<float>& B, const int ldb,
