@@ -31,41 +31,34 @@
 #define CPUBACKEND_H_INCLUDE
 #include "config.h"
 
-
-#include <vector>
 #include <cassert>
+#include <vector>
 
 #include "NetPipe.h"
 
-
 class CPUbackend : public ForwardPipe {
 public:
-    virtual void initialize(const int channels, int residual_blocks,
-                              std::shared_ptr<ForwardPipeWeights> weights);
-    virtual void forward(const std::vector<float>& input,
-                         std::vector<float>& output_pol,
-                         std::vector<float>& output_val);
+  virtual void initialize(const int channels, int residual_blocks,
+                          std::shared_ptr<ForwardPipeWeights> weights);
+  virtual void forward(const std::vector<float> &input,
+                       std::vector<float> &output_pol,
+                       std::vector<float> &output_val);
 
-    virtual void push_weights(unsigned int filter_size,
-                              unsigned int channels,
-                              unsigned int outputs,
-                              std::shared_ptr<const ForwardPipeWeights> weights);
+  virtual void push_weights(unsigned int filter_size, unsigned int channels,
+                            unsigned int outputs,
+                            std::shared_ptr<const ForwardPipeWeights> weights);
 
 private:
+  int m_input_channels;
+  int m_residual_blocks;
 
-    int m_input_channels;
-	int m_residual_blocks;
+  // Input + residual block tower
+  std::shared_ptr<const ForwardPipeWeights> m_weights;
 
-    // Input + residual block tower
-    std::shared_ptr<const ForwardPipeWeights> m_weights;
-
-    std::vector<float> m_conv_pol_w;
-    std::vector<float> m_conv_val_w;
-    std::vector<float> m_conv_pol_b;
-    std::vector<float> m_conv_val_b;
+  std::vector<float> m_conv_pol_w;
+  std::vector<float> m_conv_val_w;
+  std::vector<float> m_conv_pol_b;
+  std::vector<float> m_conv_val_b;
 };
 
 #endif
-
-
-

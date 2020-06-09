@@ -32,121 +32,106 @@
 
 #include <cassert>
 
-#include "NetPipe.h"
+#include "Board.h"
 #include "CacheTable.h"
 #include "GameState.h"
-#include "Board.h"
+#include "NetPipe.h"
 
 static constexpr int NUM_SYMMETRIES = Board::NUM_SYMMETRIES;
 static constexpr int IDENTITY_SYMMETRY = Board::IDENTITY_SYMMETRY;
 
 class Network {
 public:
-	enum class Networkfile_t {
-		LEELAZ
-	};
+  enum class Networkfile_t { LEELAZ };
 
-	enum Ensemble {
-        DIRECT, RANDOM_SYMMETRY, AVERAGE
-    };
+  enum Ensemble { DIRECT, RANDOM_SYMMETRY, AVERAGE };
 
-	using Netresult = NNResult;
-	using PolicyVertexPair = std::pair<float,int>;
+  using Netresult = NNResult;
+  using PolicyVertexPair = std::pair<float, int>;
 
-	void initialize(int playouts, const std::string & weightsfile,
-						Networkfile_t file_type = Networkfile_t::LEELAZ);
-	
-	static std::vector<float> gather_features(const GameState* const state,
-                                              const int symmetry);
+  void initialize(int playouts, const std::string &weightsfile,
+                  Networkfile_t file_type = Networkfile_t::LEELAZ);
 
-	Netresult get_output(const GameState* const state,
-                         const Ensemble ensemble,
-                         const int symmetry = -1,
-                         const bool read_cache = true,
-                         const bool write_cache = true,
-                         const bool force_selfcheck = false);
-	
-	
-	static std::pair<int, int> get_intersections_pair(int idx ,int boradsize);
+  static std::vector<float> gather_features(const GameState *const state,
+                                            const int symmetry);
+
+  Netresult get_output(const GameState *const state, const Ensemble ensemble,
+                       const int symmetry = -1, const bool read_cache = true,
+                       const bool write_cache = true,
+                       const bool force_selfcheck = false);
+
+  static std::pair<int, int> get_intersections_pair(int idx, int boradsize);
 
 private:
-	void init_winograd_transform(const int channels, const int residual_blocks);
-	void init_batchnorm_weights();
-	std::unique_ptr<ForwardPipe>&& init_net(int channels, int residual_blocks,
-                                            std::unique_ptr<ForwardPipe>&& pipe);
+  void init_winograd_transform(const int channels, const int residual_blocks);
+  void init_leelaz_batchnorm_weights();
+  std::unique_ptr<ForwardPipe> &&init_net(int channels, int residual_blocks,
+                                          std::unique_ptr<ForwardPipe> &&pipe);
 
-	bool check_net_format(Networkfile_t file_type, int channels, int blocks);
+  bool check_net_format(Networkfile_t file_type, int channels, int blocks);
 
-	bool probe_cache(const GameState* const state, Network::Netresult& result);
+  bool probe_cache(const GameState *const state, Network::Netresult &result);
 
-	std::pair<int, int> load_leelaz_network(std::istream& wtfile);
-    std::pair<int, int> load_network_file(const std::string& filename,
-											 Networkfile_t file_type);
+  std::pair<int, int> load_leelaz_network(std::istream &wtfile);
+  std::pair<int, int> load_network_file(const std::string &filename,
+                                        Networkfile_t file_type);
 
-	Netresult get_output_internal(const GameState* const state,
-                                  const int symmetry);	
+  Netresult get_output_internal(const GameState *const state,
+                                const int symmetry);
 
-	static void fill_input_plane_pair(const std::shared_ptr<Board> board,
-                                      std::vector<float>::iterator black,
-                                      std::vector<float>::iterator white,
-                                      const int symmetry);
+  static void fill_input_plane_pair(const std::shared_ptr<Board> board,
+                                    std::vector<float>::iterator black,
+                                    std::vector<float>::iterator white,
+                                    const int symmetry);
 
-	CacheTable<NNResult> m_nncache;
+  CacheTable<NNResult> m_nncache;
 
-	std::unique_ptr<ForwardPipe> m_forward;
+  std::unique_ptr<ForwardPipe> m_forward;
 
+  bool m_value_head_not_stm;
 
-	bool m_value_head_not_stm;
+  // Residual tower
+  std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
 
-	// Residual tower
-    std::shared_ptr<ForwardPipeWeights> m_fwd_weights;
-	
-    // Policy head
-	/*
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w1;
-    std::array<float, OUTPUTS_POLICY> m_bn_pol_w2;
+  // Policy head
+  /*
+std::array<float, OUTPUTS_POLICY> m_bn_pol_w1;
+std::array<float, OUTPUTS_POLICY> m_bn_pol_w2;
 
-    std::array<float, OUTPUTS_POLICY
-                      * NUM_INTERSECTIONS
-                      * POTENTIAL_MOVES> m_ip_pol_w;
-    std::array<float, POTENTIAL_MOVES> m_ip_pol_b;
-	*/
+std::array<float, OUTPUTS_POLICY
+                * NUM_INTERSECTIONS
+                * POTENTIAL_MOVES> m_ip_pol_w;
+std::array<float, POTENTIAL_MOVES> m_ip_pol_b;
+  */
 
-	std::vector<float> m_bn_pol_w1;
-	std::vector<float> m_bn_pol_w2;
+  std::vector<float> m_bn_pol_w1;
+  std::vector<float> m_bn_pol_w2;
 
-    std::vector<float> m_ip_pol_w;
-    std::vector<float> m_ip_pol_b;
+  std::vector<float> m_ip_pol_w;
+  std::vector<float> m_ip_pol_b;
 
+  // Value head
+  /*
+std::array<float, OUTPUTS_VALUE> m_bn_val_w1;
+std::array<float, OUTPUTS_VALUE> m_bn_val_w2;
 
-    // Value head
-	/*
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w1;
-    std::array<float, OUTPUTS_VALUE> m_bn_val_w2;
+std::array<float, OUTPUTS_VALUE
+                * NUM_INTERSECTIONS
+                * VALUE_LAYER> m_ip1_val_w;
+std::array<float, VALUE_LAYER> m_ip1_val_b;
 
-    std::array<float, OUTPUTS_VALUE
-                      * NUM_INTERSECTIONS
-                      * VALUE_LAYER> m_ip1_val_w;
-    std::array<float, VALUE_LAYER> m_ip1_val_b;
+std::array<float, VALUE_LAYER> m_ip2_val_w;
+std::array<float, VALUE_LABELS> m_ip2_val_b;
+  */
 
-    std::array<float, VALUE_LAYER> m_ip2_val_w;
-    std::array<float, VALUE_LABELS> m_ip2_val_b;
-	*/
+  std::vector<float> m_bn_val_w1;
+  std::vector<float> m_bn_val_w2;
 
-	std::vector<float> m_bn_val_w1;
-    std::vector<float> m_bn_val_w2;
+  std::vector<float> m_ip1_val_w;
+  std::vector<float> m_ip1_val_b;
 
-    std::vector<float> m_ip1_val_w;
-    std::vector<float> m_ip1_val_b;
-
-    std::vector<float> m_ip2_val_w;
-    std::vector<float> m_ip2_val_b;
-
+  std::vector<float> m_ip2_val_w;
+  std::vector<float> m_ip2_val_b;
 };
-
-
-
-
-
 
 #endif

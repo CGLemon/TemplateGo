@@ -30,12 +30,11 @@
     work.
 */
 
-
 #include "Evaluation.h"
 #include "GameState.h"
 
-#include <cstdint>
 #include <atomic>
+#include <cstdint>
 
 class UCTNode;
 
@@ -43,209 +42,177 @@ class UCTNode;
 
 class Edge {
 public:
-	Edge(int vertex, float policy, float delta);
-	~Edge();
-    Edge(Edge&& n);
-    Edge(const Edge&) = delete;
+  Edge(int vertex, float policy, float delta);
+  ~Edge();
+  Edge(Edge &&n);
+  Edge(const Edge &) = delete;
 
-	static size_t edge_tree_size;
-	static size_t edge_node_count;
-	static void increment_tree_size(size_t sz);
-    static void decrement_tree_size(size_t sz);
-	static void increment_tree_count(size_t ct);
-    static void decrement_tree_count(size_t ct);
+  static size_t edge_tree_size;
+  static size_t edge_node_count;
+  static void increment_tree_size(size_t sz);
+  static void decrement_tree_size(size_t sz);
+  static void increment_tree_count(size_t ct);
+  static void decrement_tree_count(size_t ct);
 
-	void set_policy(float policy);
+  void set_policy(float policy);
 
-	int get_vertex() const;
-	float get_policy() const;
-	int get_visits() const;
-	float get_eval(int color) const;
+  int get_vertex() const;
+  float get_policy() const;
+  int get_visits() const;
+  float get_eval(int color) const;
 
-	void inflate();
-	void kill_node();
-	void prune_node();
-		
-	bool is_pruned() const;
-	bool is_active() const;
-	bool is_valid() const;
-	
+  void inflate();
+  void kill_node();
+  void prune_node();
 
-	bool is_pointer() const;
-	bool is_invalid() const;
-	bool is_uninflated() const;
-	bool is_pointer(std::uint64_t) const;
-	bool is_invalid(std::uint64_t) const;
-	bool is_uninflated(std::uint64_t) const;
+  bool is_pruned() const;
+  bool is_active() const;
+  bool is_valid() const;
 
-	UCTNode* get_node() const;
+  bool is_pointer() const;
+  bool is_invalid() const;
+  bool is_uninflated() const;
+  bool is_pointer(std::uint64_t) const;
+  bool is_invalid(std::uint64_t) const;
+  bool is_uninflated(std::uint64_t) const;
 
-	UCTNode* operator->() const {
-    	return read_ptr(m_pointer.load());
-	}
+  UCTNode *get_node() const;
 
-	Edge& operator=(Edge&& n);
+  UCTNode *operator->() const { return read_ptr(m_pointer.load()); }
+
+  Edge &operator=(Edge &&n);
 
 private:
-	static constexpr std::uint64_t INVALID    = 2;
-    static constexpr std::uint64_t UNINFLATED = 1;
-    static constexpr std::uint64_t POINTER    = 0;
-	
-	float delta;
-	float policy;
-	int vertex;
-	
-	std::atomic<std::uint64_t> m_pointer{INVALID};
+  static constexpr std::uint64_t INVALID = 2;
+  static constexpr std::uint64_t UNINFLATED = 1;
+  static constexpr std::uint64_t POINTER = 0;
 
-	UCTNode * read_ptr(uint64_t v) const ;
+  float delta;
+  float policy;
+  int vertex;
 
+  std::atomic<std::uint64_t> m_pointer{INVALID};
+
+  UCTNode *read_ptr(uint64_t v) const;
 };
 
-inline bool Edge::is_pointer() const {
-	is_pointer(m_pointer.load());
-}
+inline bool Edge::is_pointer() const { is_pointer(m_pointer.load()); }
 
-inline bool Edge::is_invalid() const {
-	is_invalid(m_pointer.load());
-}
+inline bool Edge::is_invalid() const { is_invalid(m_pointer.load()); }
 
-inline bool Edge::is_uninflated() const {
-	is_uninflated(m_pointer.load());
-}
+inline bool Edge::is_uninflated() const { is_uninflated(m_pointer.load()); }
 
 inline bool Edge::is_pointer(std::uint64_t v) const {
-	return (v & POINTER_MASK) == POINTER;
+  return (v & POINTER_MASK) == POINTER;
 }
 inline bool Edge::is_invalid(std::uint64_t v) const {
-	return (v & POINTER_MASK) == INVALID;
+  return (v & POINTER_MASK) == INVALID;
 }
 inline bool Edge::is_uninflated(std::uint64_t v) const {
-	return (v & POINTER_MASK) == UNINFLATED;
+  return (v & POINTER_MASK) == UNINFLATED;
 }
 
-inline int Edge::get_vertex() const {
-	return vertex;
+inline int Edge::get_vertex() const { return vertex; }
+
+inline float Edge::get_policy() const { return policy; }
+
+inline UCTNode *Edge::read_ptr(uint64_t v) const {
+  assert(is_pointer(v));
+  return reinterpret_cast<UCTNode *>(v & ~(POINTER_MASK));
 }
-
-inline float Edge::get_policy() const {
-	return policy;
-}
-
-
-inline UCTNode * Edge::read_ptr(uint64_t v) const {
-    assert(is_pointer(v));
-    return reinterpret_cast<UCTNode*>(v & ~(POINTER_MASK));
-}
-
 
 #define VIRTUAL_LOSS_COUNT (3)
 
 class UCTNode {
 public:
-	static size_t node_tree_size;
-	static size_t node_node_count;
-	static void increment_tree_size(size_t sz);
-    static void decrement_tree_size(size_t sz);
-	static void increment_tree_count(size_t ct);
-    static void decrement_tree_count(size_t ct);
+  static size_t node_tree_size;
+  static size_t node_node_count;
+  static void increment_tree_size(size_t sz);
+  static void decrement_tree_size(size_t sz);
+  static void increment_tree_count(size_t ct);
+  static void decrement_tree_count(size_t ct);
 
-	
-	explicit UCTNode(float delta_loss, int vertex, float policy);
-	UCTNode() = delete;
-	~UCTNode();
+  explicit UCTNode(float delta_loss, int vertex, float policy);
+  UCTNode() = delete;
+  ~UCTNode();
 
-	bool expend_children(Evaluation & evaluation, GameState& state,
-						 float & eval, float min_psa_ratio);
-	
-	void link_nodelist(std::vector<Network::PolicyVertexPair>& nodelist, 
-								float min_psa_ratio);
+  bool expend_children(Evaluation &evaluation, GameState &state, float &eval,
+                       float min_psa_ratio);
 
-	float get_raw_evaluation(int color)  const;
-	float get_accumulated_evals() const;
-	float get_eval(int color) const;
-	int get_visits() const;
-	int get_vertex() const;
-	float get_policy() const;
+  void link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
+                     float min_psa_ratio);
 
-	void update(float eval);
-	void accumulate_eval(float eval);
-	void inflate_all_children();
-	bool prune_child(int vtx);
-	
-	UCTNode* uct_select_child(int color, bool is_node);
-	void kill_superkos(const GameState & state);
-	int get_most_visits_move();
-	void dirichlet_noise(float epsilon, float alpha);
-	float prepare_root_node(Evaluation & evaluation, GameState & state);
+  float get_raw_evaluation(int color) const;
+  float get_accumulated_evals() const;
+  float get_eval(int color) const;
+  int get_visits() const;
+  int get_vertex() const;
+  float get_policy() const;
 
-	void increment_virtual_loss();
-    void decrement_virtual_loss();
+  void update(float eval);
+  void accumulate_eval(float eval);
+  void inflate_all_children();
+  bool prune_child(int vtx);
 
-	void set_active(const bool active);
-	void invalinode();
-	bool is_pruned() const;
-	bool is_valid() const;
-	bool is_active() const;
-	bool has_children() const;
+  UCTNode *uct_select_child(int color, bool is_node);
+  void kill_superkos(const GameState &state);
+  int get_most_visits_move();
+  void dirichlet_noise(float epsilon, float alpha);
+  float prepare_root_node(Evaluation &evaluation, GameState &state);
 
-	bool is_expended() const;
-	bool expandable() const;
+  void increment_virtual_loss();
+  void decrement_virtual_loss();
 
-	UCTNode* get_node();
+  void set_active(const bool active);
+  void invalinode();
+  bool is_pruned() const;
+  bool is_valid() const;
+  bool is_active() const;
+  bool has_children() const;
+
+  bool is_expended() const;
+  bool expandable() const;
+
+  UCTNode *get_node();
+
 private:
-	enum Status : std::uint8_t {
-		INVALID,
-        PRUNED,
-        ACTIVE
-    };
+  enum Status : std::uint8_t { INVALID, PRUNED, ACTIVE };
 
-	int m_vertex;
-	float m_policy;
-	float m_raw_eval{0.0f};
-	float m_delta_loss;
+  int m_vertex;
+  float m_policy;
+  float m_raw_eval{0.0f};
+  float m_delta_loss;
 
-	std::atomic<float> m_squared_eval_diff{1e-4f};
-	std::atomic<float> m_accumulated_evals{0.0};
-    std::atomic<Status> m_status{ACTIVE};
+  std::atomic<float> m_squared_eval_diff{1e-4f};
+  std::atomic<float> m_accumulated_evals{0.0};
+  std::atomic<Status> m_status{ACTIVE};
 
-	enum class ExpandState : std::uint8_t {
-        INITIAL = 0,
-        EXPANDING,
-        EXPANDED
-    };
+  enum class ExpandState : std::uint8_t { INITIAL = 0, EXPANDING, EXPANDED };
 
-	std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
+  std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
 
-    // Tree data
-    std::vector<Edge> m_children;	
+  // Tree data
+  std::vector<Edge> m_children;
 
-	std::atomic<int> m_virtual_loss{0};
-    std::atomic<int> m_visits{0};
+  std::atomic<int> m_virtual_loss{0};
+  std::atomic<int> m_visits{0};
 
-	bool acquire_expanding();
+  bool acquire_expanding();
 
-    // EXPANDING -> DONE
-    void expand_done();
+  // EXPANDING -> DONE
+  void expand_done();
 
-    // EXPANDING -> INITIAL
-    void expand_cancel();
+  // EXPANDING -> INITIAL
+  void expand_cancel();
 
-    // wait until we are on EXPANDED state
-    void wait_expanded();
-
+  // wait until we are on EXPANDED state
+  void wait_expanded();
 };
 
-inline bool UCTNode::is_pruned() const {
-    return m_status == PRUNED;
-}
+inline bool UCTNode::is_pruned() const { return m_status == PRUNED; }
 
-inline bool UCTNode::is_active() const {
-    return m_status == ACTIVE;
-}
+inline bool UCTNode::is_active() const { return m_status == ACTIVE; }
 
-inline bool UCTNode::is_valid() const {
-	return m_status != INVALID;
-}
-
+inline bool UCTNode::is_valid() const { return m_status != INVALID; }
 
 #endif

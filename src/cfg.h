@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
-extern FILE * cfg_logfile_stream;
+extern FILE *cfg_logfile_stream;
 
 extern bool cfg_quiet;
 extern bool cfg_allowed_suicide;
@@ -24,11 +24,9 @@ extern float cfg_logconst;
 extern bool cfg_noise;
 extern float cfg_delta_attenuation_ratio;
 
-
 extern int cfg_maintime;
 extern int cfg_byotime;
 extern int cfg_byostones;
-
 
 extern int cfg_boardsize;
 extern float cfg_komi;
@@ -36,8 +34,6 @@ extern int cfg_playouts;
 extern float cfg_allow_pass_ratio;
 
 void init_cfg();
-void arg_parser(int argc, char** argv);
-
-
+void arg_parser(int argc, char **argv);
 
 #endif
