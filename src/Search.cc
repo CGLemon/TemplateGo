@@ -160,3 +160,18 @@ int Search::uct_search() {
 
   return select_move;
 }
+
+bool Search::is_running() {
+
+  return false;
+}
+
+void UCTWorker::operator()() {
+    do {
+        auto currstate = std::make_unique<GameState>(m_rootstate);
+        auto result = m_search->play_simulation(*currstate, m_root, m_root);
+        if (result.valid()) {
+            m_search->increment_playouts();
+        }
+    } while (m_search->is_running());
+}

@@ -10,6 +10,13 @@
 
 using namespace std;
 
+
+/*
+/
+/ 所有代碼都利用 clang-format 重新整理過
+/ 參數 -style=LLVM
+/ 
+*/
 void normal_loop() {
 
   auto maingame = std::make_shared<GameState>();

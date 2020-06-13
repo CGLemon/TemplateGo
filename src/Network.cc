@@ -42,6 +42,10 @@
 #include "blas/CPULayers.h"
 #include "cfg.h"
 
+#ifdef USE_CUDA
+#include "CUDAbackend.h"
+#endif
+
 #ifdef USE_EIGEN
 #include <Eigen/Dense>
 #endif
@@ -204,6 +208,7 @@ std::pair<int, int> Network::load_leelaz_network(std::istream &wtfile) {
   const int plain_conv_layers = 1 + (residual_blocks * 2);
   const int plain_conv_wts = plain_conv_layers * 4;
   linecount = 0;
+  
   while (std::getline(wtfile, line)) {
     std::vector<float> weights;
     float weight;
@@ -272,7 +277,7 @@ std::pair<int, int> Network::load_leelaz_network(std::istream &wtfile) {
   }
   process_bn_var(m_bn_pol_w2);
   process_bn_var(m_bn_val_w2);
-
+  
   if (!check_net_format(Networkfile_t::LEELAZ, channels, residual_blocks)) {
     m_fwd_weights.reset();
     return {0, 0};
@@ -332,34 +337,16 @@ std::pair<int, int> Network::load_network_file(const std::string &filename,
       } else {
         if (format_version == 2) {
           m_value_head_not_stm = true;
+          auto_printf("Loading ELF OpenGO network file.\n");
         } else {
           m_value_head_not_stm = false;
+          auto_printf("Loading Leelaz network file.\n");
         }
-        auto_printf("Loading Leelaz network file.\n");
         return load_leelaz_network(buffer);
       }
     }
   }
   return {0, 0};
-}
-
-void Network::init_winograd_transform(const int channels,
-                                      const int residual_blocks) {
-  /*
-  auto weight_index = size_t{0};
-
-m_fwd_weights->m_conv_weights[weight_index] =
-  winograd_transform_f(m_fwd_weights->m_conv_weights[weight_index],
-                       channels, INPUT_CHANNELS);
-weight_index++;
-
-  for (auto i = size_t{0}; i < residual_blocks * 2; i++) {
-  m_fwd_weights->m_conv_weights[weight_index] =
-      winograd_transform_f(m_fwd_weights->m_conv_weights[weight_index],
-                           channels, channels);
-  weight_index++;
-}
-  */
 }
 
 void Network::init_leelaz_batchnorm_weights() {
@@ -386,7 +373,7 @@ void Network::init_leelaz_batchnorm_weights() {
 std::unique_ptr<ForwardPipe> &&
 Network::init_net(int channels, int residual_blocks,
                   std::unique_ptr<ForwardPipe> &&pipe) {
-
+  
   pipe->initialize(channels, residual_blocks, m_fwd_weights);
   pipe->push_weights(WINOGRAD_ALPHA, INPUT_CHANNELS, channels, m_fwd_weights);
 
@@ -424,11 +411,17 @@ void Network::initialize(int playouts, const std::string &weightsfile,
     exit(EXIT_FAILURE);
   }
 
-  init_winograd_transform(channels, residual_blocks);
   init_leelaz_batchnorm_weights();
 
+#ifdef USE_CUDA
+  using backend = CUDAbackend;
+#else
+  using backend = CPUbackend;
+#endif 
+
   m_forward =
-      init_net(channels, residual_blocks, std::make_unique<CPUbackend>());
+      init_net(channels, residual_blocks, std::make_unique<backend>());
+
   m_fwd_weights.reset();
   auto_printf("Pushing Network is complete.\n");
 }
@@ -475,18 +468,16 @@ void Network::fill_input_plane_pair(const std::shared_ptr<Board> board,
                                     std::vector<float>::iterator black,
                                     std::vector<float>::iterator white,
                                     const int symmetry) {
-  for (auto idx = 0; idx < NUM_INTERSECTIONS; idx++) {
+  for (int idx = 0; idx < NUM_INTERSECTIONS; idx++) {
     const int sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
-    // const int x = sym_idx % BOARD_SIZE;
-    // const int y = sym_idx / BOARD_SIZE;
     const auto sym_pair = get_intersections_pair(sym_idx, BOARD_SIZE);
     const int x = sym_pair.first;
     const int y = sym_pair.second;
     const int color = board->get_state(x, y);
     if (color == Board::BLACK) {
-      black[idx] = float(true);
+      black[idx] = static_cast<float>(true);
     } else if (color == Board::WHITE) {
-      white[idx] = float(true);
+      white[idx] = static_cast<float>(true);
     }
   }
 }
@@ -494,7 +485,7 @@ void Network::fill_input_plane_pair(const std::shared_ptr<Board> board,
 std::vector<float> Network::gather_features(const GameState *const state,
                                             const int symmetry) {
   assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-  auto input_data = std::vector<float>(INPUT_CHANNELS * NUM_INTERSECTIONS);
+  auto input_data = std::vector<float>(INPUT_CHANNELS * NUM_INTERSECTIONS, 0.0f);
 
   const auto to_move = state->board.get_to_move();
   const auto blacks_move = to_move == Board::BLACK;
@@ -520,7 +511,7 @@ std::vector<float> Network::gather_features(const GameState *const state,
                           black_it + h * NUM_INTERSECTIONS,
                           white_it + h * NUM_INTERSECTIONS, symmetry);
   }
-  std::fill(to_move_it, to_move_it + NUM_INTERSECTIONS, float(true));
+  std::fill(to_move_it, to_move_it + NUM_INTERSECTIONS, static_cast<float>(true));
 
   return input_data;
 }
@@ -528,35 +519,34 @@ std::vector<float> Network::gather_features(const GameState *const state,
 Network::Netresult Network::get_output_internal(const GameState *const state,
                                                 const int symmetry) {
   assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
-  constexpr auto width = BOARD_SIZE;
-  constexpr auto height = BOARD_SIZE;
+  constexpr int width = BOARD_SIZE;
+  constexpr int height = BOARD_SIZE;
   const auto input_data = gather_features(state, symmetry);
   std::vector<float> policy_data(OUTPUTS_POLICY * width * height);
   std::vector<float> value_data(OUTPUTS_VALUE * width * height);
 
   m_forward->forward(input_data, policy_data, value_data);
 
-  using batchnorm = Batchnorm;
-  using fullyconnect = FullyConnect;
   // Get the moves
-  batchnorm::Forward(OUTPUTS_POLICY, policy_data, m_bn_pol_w1.data(),
+  Batchnorm::Forward(OUTPUTS_POLICY, policy_data, m_bn_pol_w1.data(),
                      m_bn_pol_w2.data());
 
   std::vector<float> policy_out(POTENTIAL_MOVES);
   std::vector<float> winrate_data(VALUE_LAYER);
   std::vector<float> winrate_out(VALUE_LABELS);
 
-  fullyconnect::Forward(OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES,
+  FullyConnect::Forward(OUTPUTS_POLICY * NUM_INTERSECTIONS, POTENTIAL_MOVES,
                         policy_data, m_ip_pol_w, m_ip_pol_b, policy_out, false);
   const auto outputs = Activation::softmax(policy_out, cfg_softmax_temp);
 
   // Now get the value
-  batchnorm::Forward(OUTPUTS_VALUE, value_data, m_bn_val_w1.data(),
+  Batchnorm::Forward(OUTPUTS_VALUE, value_data, m_bn_val_w1.data(),
                      m_bn_val_w2.data());
-  fullyconnect::Forward(OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER,
+  FullyConnect::Forward(OUTPUTS_VALUE * NUM_INTERSECTIONS, VALUE_LAYER,
                         value_data, m_ip1_val_w, m_ip1_val_b, winrate_data,
                         true);
-  fullyconnect::Forward(VALUE_LAYER, VALUE_LABELS, winrate_data, m_ip2_val_w,
+
+  FullyConnect::Forward(VALUE_LAYER, VALUE_LABELS, winrate_data, m_ip2_val_w,
                         m_ip2_val_b, winrate_out, false);
 
   // Map TanH output range [-1..1] to [0..1] range
@@ -596,7 +586,7 @@ Network::get_output(const GameState *const state, const Ensemble ensemble,
     result = get_output_internal(state, symmetry);
   } else if (ensemble == AVERAGE) {
     assert(symmetry == -1);
-    for (auto sym = 0; sym < NUM_SYMMETRIES; ++sym) {
+    for (int sym = 0; sym < NUM_SYMMETRIES; ++sym) {
       auto tmpresult = get_output_internal(state, sym);
       result.winrate[0] +=
           tmpresult.winrate[0] / static_cast<float>(NUM_SYMMETRIES);

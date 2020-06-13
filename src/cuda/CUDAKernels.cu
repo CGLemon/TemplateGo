@@ -30,12 +30,13 @@ __global__ void batchNorm_kernel(T *data, const float *means,
 }
 
 template <typename T>
-void batchNorm(T *data, const float *means, const float *stddevs, int batch,
-               int channels, int spatial_size, const T *eltwise) {
+void cuda_batchnorm(T *data, const float *means, const float *stddevs,
+                    int batch, int channels, int spatial_size,
+                    const T *eltwise) {
 
   const int total_elements = batch * channels * spatial_size;
   const int kBlockSize = KBLOCKSIZE;
-  int blocks = DivUp(total_elements, kBlockSize);
+  const int blocks = DivUp(total_elements, kBlockSize);
 
   batchNorm_kernel<<<blocks, kBlockSize>>>(data, means, stddevs, batch,
                                            channels, spatial_size, eltwise);
@@ -86,12 +87,12 @@ __global__ void im2col_kernel(int filter_size, int pad, int batch, int C, int H,
 }
 
 template <typename T>
-void im2col(int filter_size, int batch, int channels, int H, int W, T *input,
-            T *output) {
+void cuda_im2col(int filter_size, int batch, int channels, int H, int W,
+                 T *input, T *output) {
 
   const int total_elements = batch * channels * H * W;
   const int kBlockSize = KBLOCKSIZE;
-  int blocks = DivUp(total_elements, kBlockSize);
+  const int blocks = DivUp(total_elements, kBlockSize);
 
   const int pad = (filter_size / 2);
   const int output_h = H + 2 * pad - filter_size + 1;
@@ -112,11 +113,32 @@ void cuda_gemm(bool TA, bool TB, int M, int N, int K, float ALPHA,
                                  ldc));
 }
 
-template void batchNorm<float>(float *data, const float *means,
-                               const float *stddevs, int N, int channels,
-                               int spatial_size, const float *eltwise);
+template <typename T>
+__global__ void swap_kernel(T *a, T *b, int size) {
+  int index = threadIdx.x + blockDim.x * blockIdx.x;
+  if (index < size) {
+    T temp_a = a[index];
+    T temp_b = b[index];
+    a[index] = temp_b;
+    b[index] = temp_a;
+  }
+} 
 
-template void im2col<float>(int filter_size, int N, int C, int H, int W,
-                            float *data_im, float *data_col);
+template <typename T>
+void cuda_swap(T *a, T *b, int size) {
+  const int kBlockSize = KBLOCKSIZE;
+  const int blocks = DivUp(size, kBlockSize);
+  swap_kernel<<<blocks, kBlockSize>>>(a, b ,size);
+}
+
+
+template void cuda_batchnorm<float>(float *data, const float *means,
+                                    const float *stddevs, int N, int channels,
+                                    int spatial_size, const float *eltwise);
+
+template void cuda_im2col<float>(int filter_size, int N, int C, int H, int W,
+                                 float *data_im, float *data_col);
+
+template void cuda_swap(float *a, float *b, int size);
 
 #endif

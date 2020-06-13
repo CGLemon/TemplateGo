@@ -6,11 +6,14 @@
 
 class CudaBatchnorm {
 public:
-  CudaBatchnorm(int N, int channels);
+  CudaBatchnorm(int batch, int channels);
   ~CudaBatchnorm();
-
-  void Forward(const int batch, const size_t channels, float *data,
+  // Forward: 須額外申請 device 端記憶體
+  void Forward(const int batch, float *data,
                const float *const eltwise = nullptr);
+
+  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
+  void cpu_Forward(const int batch, std::vector<float> &data, float* eltwise = nullptr);
 
   void LoadingWeight(const std::vector<float> &means,
                      const std::vector<float> &stddevs);
@@ -18,43 +21,40 @@ public:
 private:
   static constexpr int spatial_size = NUM_INTERSECTIONS;
   int channels;
-  int N;
+  int batch;
   float *cuda_means;
   float *cuda_stddevs;
+  bool is_loaded;
 };
 
 class CudaConvolve {
 public:
-  CudaConvolve(const size_t batch, const size_t filter, const size_t channels);
+  CudaConvolve(const size_t batch, const size_t filter, const size_t in_channels, const size_t out_channels);
   ~CudaConvolve();
+  // Forward: 須額外申請 device 端記憶體
   void Forward(const int batch, float *input, float *output);
+  
+  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
+  void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
   void LoadingWeight(const std::vector<float> &weights,
                      const std::vector<float> &biases);
 
 private:
-  void im2col(const int batch, float *input, float *output);
-
-  int N;
+  
+  static constexpr int width = CONV2D_SIZE;
+  static constexpr int height = CONV2D_SIZE;
+  static constexpr int spatial_size = width * height;
+  int filter_dim;
+  int batch;
   int filter;
-  int channels;
+  int in_channels;
+  int out_channels;
   float *cuda_weights;
   float *cuda_biases;
-};
+  float *cuda_col;
 
-class cuda_test {
-public:
-  static void test_im2col(const size_t filter_size, const int channels,
-                          const std::vector<float> &input,
-                          std::vector<float> &output);
-
-  static void test_batchnorm(const size_t channels, std::vector<float> &data,
-                             const std::vector<float> &means,
-                             const std::vector<float> &stddevs,
-                             const float *const eltwise = nullptr);
-
-  static void test_gemm_gpu(bool TA, bool TB, int M, int N, int K, float ALPHA,
-                            const float *A, int lda, const float *B, int ldb,
-                            float BETA, float *C, int ldc);
+  size_t w_s;
+  bool is_loaded;
 };
 #endif
 #endif

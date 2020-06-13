@@ -4,6 +4,7 @@
 #include "Evaluation.h"
 #include "GameState.h"
 #include "UCTNode.h"
+#include "ThreadPool.h"
 
 class SearchResult {
 public:
@@ -48,7 +49,7 @@ public:
 
   float get_min_psa_ratio() const;
   void increment_playouts();
-
+  bool is_running();
 private:
   Evaluation &m_evaluation;
   GameState &m_rootstate;
@@ -58,4 +59,14 @@ private:
   std::atomic<int> m_playouts;
 };
 
+class UCTWorker {
+public:
+    UCTWorker(GameState & state, Search * search, UCTNode * root)
+      : m_rootstate(state), m_search(search), m_root(root) {}
+    void operator()();
+private:
+    GameState & m_rootstate;
+    Search * m_search;
+    UCTNode * m_root;
+};
 #endif

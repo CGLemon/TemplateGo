@@ -1,6 +1,11 @@
 cmake_minimum_required (VERSION 3.9)
 project (TemplateGo)
 
+if (USE_OPENMP) 
+	set(CMAKE_CXX_FLAGS "-fopenmp  ${CMAKE_CXX_FLAGS}")
+endif()
+
+
 if(GPU_BACKEND STREQUAL "CUDA")
 	message(STATUS "Using CUDA backend")
 	add_definitions(-DUSE_CUDA)
@@ -53,10 +58,7 @@ else()
 endif()
 
 
-
-
 include_directories(${IncludePath})
-
 
 
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/blas CPUBLAS_SRCS)

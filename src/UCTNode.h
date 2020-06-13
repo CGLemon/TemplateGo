@@ -78,7 +78,10 @@ public:
 
   UCTNode *get_node() const;
 
-  UCTNode *operator->() const { return read_ptr(m_pointer.load()); }
+  UCTNode *operator->() const {
+    assert(is_pointer());
+    return read_ptr(m_pointer.load()); 
+  }
 
   Edge &operator=(Edge &&n);
 
@@ -155,6 +158,8 @@ public:
   bool prune_child(int vtx);
 
   UCTNode *uct_select_child(int color, bool is_node);
+  UCTNode *get_most_visits_child();
+
   void kill_superkos(const GameState &state);
   int get_most_visits_move();
   void dirichlet_noise(float epsilon, float alpha);
@@ -170,6 +175,7 @@ public:
   bool is_active() const;
   bool has_children() const;
 
+  bool is_expending() const;
   bool is_expended() const;
   bool expandable() const;
 
@@ -177,6 +183,7 @@ public:
 
 private:
   enum Status : std::uint8_t { INVALID, PRUNED, ACTIVE };
+  std::atomic<Status> m_status{ACTIVE};  
 
   int m_vertex;
   float m_policy;
@@ -185,17 +192,17 @@ private:
 
   std::atomic<float> m_squared_eval_diff{1e-4f};
   std::atomic<float> m_accumulated_evals{0.0};
-  std::atomic<Status> m_status{ACTIVE};
+
+  std::vector<Edge> m_children;
+
+  std::atomic<int> m_virtual_loss{0};
+  std::atomic<int> m_visits{0};
 
   enum class ExpandState : std::uint8_t { INITIAL = 0, EXPANDING, EXPANDED };
 
   std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
 
-  // Tree data
-  std::vector<Edge> m_children;
 
-  std::atomic<int> m_virtual_loss{0};
-  std::atomic<int> m_visits{0};
 
   bool acquire_expanding();
 
@@ -209,10 +216,22 @@ private:
   void wait_expanded();
 };
 
-inline bool UCTNode::is_pruned() const { return m_status == PRUNED; }
+inline bool UCTNode::expandable() const {
+  return m_expand_state.load() == ExpandState::INITIAL;
+}
 
-inline bool UCTNode::is_active() const { return m_status == ACTIVE; }
+inline bool UCTNode::is_expending() const {
+  return m_expand_state.load() == ExpandState::EXPANDING;
+}
 
-inline bool UCTNode::is_valid() const { return m_status != INVALID; }
+inline bool UCTNode::is_expended() const {
+  return m_expand_state.load() == ExpandState::EXPANDED;
+}
+
+inline bool UCTNode::is_pruned() const { return m_status.load() == PRUNED; }
+
+inline bool UCTNode::is_active() const { return m_status.load() == ACTIVE; }
+
+inline bool UCTNode::is_valid() const { return m_status.load() != INVALID; }
 
 #endif

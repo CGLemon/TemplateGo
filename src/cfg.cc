@@ -3,6 +3,9 @@
 #include "gtp.h"
 
 #include <string>
+#include <sstream>
+#include <fstream>
+#include <iostream>
 
 bool cfg_quiet;
 FILE *cfg_logfile_stream;
@@ -71,4 +74,18 @@ void init_cfg() {
   cfg_komi = DEFULT_KOMI;
   cfg_playouts = 100;
   cfg_allow_pass_ratio = 0.2f;
+}
+
+bool cfg_loader_parser(std::string cfg) {
+  return false;
+}
+
+void cfg_loader(std::string filename) {
+  std::ifstream cfg_file(filename.c_str());
+
+  auto stream_line = std::string{};
+  while (std::getline(cfg_file, stream_line)) {
+    if(!cfg_loader_parser(stream_line)) break;
+  }
+  cfg_file.close();
 }

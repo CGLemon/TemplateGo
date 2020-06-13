@@ -14,14 +14,14 @@
 
 
 
-        https://www.lysator.liu.se/~gunnar/gtp/gtp2-spec-draft2/gtp2-spec.html
-        包含一系列 GTP2 的協議
-        GTP 可以讓程式相互溝通，這不是為人設置的界面
+    https://www.lysator.liu.se/~gunnar/gtp/gtp2-spec-draft2/gtp2-spec.html
+    包含一系列 GTP2 的協議
+    GTP 可以讓程式相互溝通，這不是為人設置的界面
 
 */
 using namespace Utils;
 
-Evaluation evaluation;
+Evaluation* evaluation;
 
 std::string gtp_vertex_parser(int vertex) {
 
@@ -50,10 +50,12 @@ void gtp::gtp_init_all(int argc, char **argv) {
   init_cfg();
 
   arg_parser(argc, argv);
-  evaluation.initialize_network(cfg_playouts, cfg_weightsfile);
-
-  printf("All parameters are initialize. %s is ready...\n",
-         PROGRAM_NAME.c_str());
+  evaluation = new Evaluation;
+  evaluation->initialize_network(cfg_playouts, cfg_weightsfile);
+  
+  auto_printf("Warning! The program version is %s. Don't work well now.\n", PROGRAM_VERSION.c_str());
+  auto_printf("All parameters are initialize. %s is ready...\n",
+               PROGRAM_NAME.c_str());
 }
 
 void gtp::execute(std::string input, GameState &state) {
@@ -108,7 +110,7 @@ bool gtp::normal_execute(std::string input, GameState &state) {
 
 bool gtp::gtp_execute(std::string input, GameState &state) {
 
-  static auto search = std::make_shared<Search>(state, evaluation);
+  static auto search = std::make_shared<Search>(state, *evaluation);
 
   std::stringstream cmd_stream(input);
   auto cmd = std::string{};
@@ -116,6 +118,7 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
   cmd_stream >> cmd;
   if (cmd == "quit") {
     Utils::gtp_printf("\n");
+    delete evaluation;
     exit(EXIT_SUCCESS);
 
   } else if (cmd == "protocol_version") {

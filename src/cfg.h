@@ -35,5 +35,6 @@ extern float cfg_allow_pass_ratio;
 
 void init_cfg();
 void arg_parser(int argc, char **argv);
-
+void cfg_loader(std::string filename);
+bool cfg_loader_parser(std::string cfg);
 #endif

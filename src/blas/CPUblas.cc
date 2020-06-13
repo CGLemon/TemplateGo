@@ -148,7 +148,6 @@ void blas::dense(const int inputs, const int outputs,
                                outputs);
 #else
 #ifdef USE_OPENBLAS
-
   cblas_sgemv(CblasRowMajor, CblasNoTrans, outputs, inputs, 1.0f, &weights[0],
               inputs, &input[0], 1, 0.0f, &output[0], 1);
 
@@ -196,9 +195,9 @@ void blas::winograd_gemm(const int set_U, const int set_V, const int set_M,
   Gemm<true, false>::blas_gemm(M, N, K, alpha, A.data() + set_U, lda,
                                B.data() + set_V, ldb, beta, C.data() + set_M,
                                ldc);
+
 #else
 #ifdef USE_OPENBLAS
-
   cblas_sgemm(CblasRowMajor, CblasTrans, CblasNoTrans, M, N, K, alpha,
               &A[set_U], lda, &B[set_V], ldb, beta, &C[set_M], ldc);
 
@@ -213,17 +212,3 @@ void blas::winograd_gemm(const int set_U, const int set_V, const int set_M,
 #endif
 #endif
 }
-
-/*
-0.00001 0.00001 0.00001 0.00004 0.00005 0.00004 0.00003 0.00002 0.00001
-0.00002 0.00002 0.00002 0.00010 0.00009 0.00005 0.00005 0.00003 0.00001
-0.00002 0.00002 0.00009 0.00029 0.00016 0.00057 0.03722 0.00004 0.00004
-0.00001 0.00001 0.00012 0.00283 0.00965 0.08812 0.02435 0.00010 0.00001
-0.00001 0.00002 0.00005 0.01174 0.73678 0.05139 0.03018 0.00006 0.00002
-0.00001 0.00002 0.00017 0.00105 0.00187 0.00095 0.00013 0.00002 0.00002
-0.00001 0.00002 0.00031 0.00021 0.00021 0.00015 0.00004 0.00003 0.00001
-0.00001 0.00002 0.00001 0.00001 0.00002 0.00002 0.00002 0.00002 0.00001
-0.00001 0.00001 0.00001 0.00001 0.00002 0.00002 0.00001 0.00001 0.00001
-pass : 0.00000
-NN eval = 0.485828
-*/

@@ -38,13 +38,22 @@
 #include "CPUbackend.h"
 #include "NetPipe.h"
 
+#include "Utils.h"
+
+using namespace Utils;
+
+CPUbackend::CPUbackend() {
+  auto_printf("Using cpu blas network.\n");
+}
+
+
 void CPUbackend::initialize(int channels, int residual_blocks,
                             std::shared_ptr<ForwardPipeWeights> weights) {
   m_input_channels = channels;
   m_residual_blocks = residual_blocks;
 
   auto weight_index = size_t{0};
-  /*
+
   weights->m_conv_weights[weight_index] = winograd_transform_f(
       weights->m_conv_weights[weight_index], m_input_channels, INPUT_CHANNELS);
   weight_index++;
@@ -54,7 +63,7 @@ void CPUbackend::initialize(int channels, int residual_blocks,
         winograd_transform_f(weights->m_conv_weights[weight_index],
                              m_input_channels, m_input_channels);
     weight_index++;
-  }*/
+  }
 }
 
 void CPUbackend::forward(const std::vector<float> &input,
@@ -77,15 +86,12 @@ void CPUbackend::forward(const std::vector<float> &input,
   using batchnorm = Batchnorm;
   using Convolve_3 = winograd_convolve3;
 
-  // Convolve_3::Forward(output_channels, input, m_weights->m_conv_weights[0],
-  // V,
-  //                    M, conv_out);
-  Convolve::Forward(3, output_channels, input, m_weights->m_conv_weights[0],
-                    m_weights->m_conv_biases[0], conv_out);
-
+  Convolve_3::Forward(output_channels, input, m_weights->m_conv_weights[0],
+                      V, M, conv_out);
   batchnorm::Forward(output_channels, conv_out,
                      m_weights->m_batchnorm_means[0].data(),
                      m_weights->m_batchnorm_stddevs[0].data());
+  
 
   // Residual tower
   auto conv_in = std::vector<float>(output_channels * NUM_INTERSECTIONS);
@@ -93,31 +99,27 @@ void CPUbackend::forward(const std::vector<float> &input,
   for (auto i = size_t{1}; i < m_weights->m_conv_weights.size(); i += 2) {
     auto output_channels = m_input_channels;
     std::swap(conv_out, conv_in);
-    // Convolve_3::Forward(output_channels, conv_in,
-    // m_weights->m_conv_weights[i],
-    //                    V, M, conv_out);
-    Convolve::Forward(3, output_channels, conv_in, m_weights->m_conv_weights[i],
-                      m_weights->m_conv_biases[i], conv_out);
+    Convolve_3::Forward(output_channels, conv_in,
+                        m_weights->m_conv_weights[i], V, M, conv_out);
     batchnorm::Forward(output_channels, conv_out,
                        m_weights->m_batchnorm_means[i].data(),
                        m_weights->m_batchnorm_stddevs[i].data());
-
+    
     std::swap(conv_in, res);
     std::swap(conv_out, conv_in);
-    // Convolve_3::Forward(output_channels, conv_in,
-    //                    m_weights->m_conv_weights[i + 1], V, M, conv_out);
-    Convolve::Forward(3, output_channels, conv_in,
-                      m_weights->m_conv_weights[i + 1],
-                      m_weights->m_conv_biases[i + 1], conv_out);
+    Convolve_3::Forward(output_channels, conv_in,
+                        m_weights->m_conv_weights[i + 1], V, M, conv_out);
     batchnorm::Forward(
         output_channels, conv_out, m_weights->m_batchnorm_means[i + 1].data(),
         m_weights->m_batchnorm_stddevs[i + 1].data(), res.data());
+    
   }
   Convolve_1::Forward(OUTPUTS_POLICY, conv_out, m_conv_pol_w, m_conv_pol_b,
                       output_pol);
   Convolve_1::Forward(OUTPUTS_VALUE, conv_out, m_conv_val_w, m_conv_val_b,
                       output_val);
 }
+
 
 void CPUbackend::push_weights(
     unsigned int /*filter_size*/, unsigned int /*channels*/,

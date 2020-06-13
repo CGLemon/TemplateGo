@@ -36,8 +36,11 @@
 
 #include "NetPipe.h"
 
+
 class CPUbackend : public ForwardPipe {
 public:
+  CPUbackend();
+
   virtual void initialize(const int channels, int residual_blocks,
                           std::shared_ptr<ForwardPipeWeights> weights);
   virtual void forward(const std::vector<float> &input,

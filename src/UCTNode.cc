@@ -366,7 +366,7 @@ UCTNode *UCTNode::uct_select_child(int color, bool is_root) {
     double winrate = fpu_eval;
 
     if (child.is_pointer() &&
-        child->m_expand_state.load() == ExpandState::EXPANDING) {
+        child->is_expending()) {
       winrate = -1.0f - fpu_reduction;
     } else if (child.get_visits() > 0) {
       winrate = child.get_eval(color);
@@ -418,6 +418,7 @@ void UCTNode::dirichlet_noise(float epsilon, float alpha) {
   }
 }
 
+
 void UCTNode::kill_superkos(const GameState &state) {
   Edge *pass_child = nullptr;
   size_t valid_count = 0;
@@ -458,7 +459,7 @@ if (valid_count > 1 && pass_child &&
 int UCTNode::get_most_visits_move() {
   wait_expanded();
 
-  assert(!m_children.empty());
+  assert(has_children());
 
   int most_visits = std::numeric_limits<int>::lowest();
   int most_vertex = Board::NO_VERTEX;
@@ -473,6 +474,27 @@ int UCTNode::get_most_visits_move() {
 
   return most_vertex;
 }
+
+UCTNode *UCTNode::get_most_visits_child() {
+  wait_expanded();
+  assert(has_children());
+
+  int most_visits = std::numeric_limits<int>::lowest();
+  Edge *most_child = nullptr;
+  for (auto &child : m_children) { 
+    const int node_visits = child.get_visits();
+    if (node_visits > most_visits) {
+      most_visits = node_visits;
+      most_child = &child;
+    }
+  }
+
+  assert(most_child != nullptr);
+  most_child->inflate();
+
+  return most_child->get_node();
+}
+
 
 void UCTNode::accumulate_eval(float eval) {
   Utils::atomic_add(m_accumulated_evals, eval);
@@ -540,14 +562,6 @@ void UCTNode::increment_tree_count(size_t ct) {
 void UCTNode::decrement_tree_count(size_t ct) {
   std::lock_guard<std::mutex> lock(tree_mutex);
   node_node_count -= ct;
-}
-
-bool UCTNode::is_expended() const {
-  return ExpandState::EXPANDED == m_expand_state;
-}
-
-bool UCTNode::expandable() const {
-  return ExpandState::INITIAL == m_expand_state;
 }
 
 UCTNode *UCTNode::get_node() { return this; }
