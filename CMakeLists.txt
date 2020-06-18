@@ -2,9 +2,12 @@ cmake_minimum_required (VERSION 3.9)
 project (TemplateGo)
 
 if (USE_OPENMP) 
-	set(CMAKE_CXX_FLAGS "-fopenmp  ${CMAKE_CXX_FLAGS}")
+	set(CMAKE_CXX_FLAGS "-fopenmp ${CMAKE_CXX_FLAGS}")
 endif()
 
+if (USE_AVX) 
+	set(CMAKE_CXX_FLAGS "-mavx -mfma ${CMAKE_CXX_FLAGS}")
+endif()
 
 if(GPU_BACKEND STREQUAL "CUDA")
 	message(STATUS "Using CUDA backend")
@@ -14,14 +17,13 @@ if(GPU_BACKEND STREQUAL "CUDA")
 	aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/cuda CUDA_SRCS)
 
 	set(CUDA_STANDARD 14)
-
 else()
 	message(STATUS "Using CPU backend")
 
 endif()
 
 set(IncludePath "${CMAKE_CURRENT_SOURCE_DIR}/src")
-set(CMAKE_CXX_FLAGS "-ffast-math -O3  ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "-ffast-math -O3 -march=native -flto ${CMAKE_CXX_FLAGS}")
 
 find_package(Threads REQUIRED)
 

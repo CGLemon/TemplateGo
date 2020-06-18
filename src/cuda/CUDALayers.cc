@@ -87,7 +87,6 @@ CudaConvolve::CudaConvolve(const size_t MAX_batch, const size_t filter_size,
 CudaConvolve::~CudaConvolve() {
   if (is_loaded) {
     ReportCUDAErrors(cudaFree(cuda_weights));
-    ReportCUDAErrors(cudaFree(cuda_biases));
   }
 }
 
@@ -131,23 +130,17 @@ void CudaConvolve::cpu_Forward(const int b, const std::vector<float> &input, std
 }
 
 
-void CudaConvolve::LoadingWeight(const std::vector<float> &weights,
-                                 const std::vector<float> &biases) {
+void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
 
   const size_t weights_size = sizeof(float) * weights.size();
-  const size_t biases_size = sizeof(float) * out_channels;
-  assert(biases_size == sizeof(float) * biases.size() &&
-         weights.size() % (filter * filter * out_channels * in_channels) == 0);
+  assert(weights.size() % (filter * filter * out_channels * in_channels) == 0);
 
   w_s = weights_size;
 
-  ReportCUDAErrors(cudaMalloc(&cuda_weights, weights_size));
-  ReportCUDAErrors(cudaMalloc(&cuda_biases, biases_size));
-  ReportCUDAErrors(cudaMalloc(&cuda_col, weights_size * filter * filter));
+  ReportCUDAErrors(cudaMalloc(&cuda_weights, w_s));
+  ReportCUDAErrors(cudaMalloc(&cuda_col, w_s * filter * filter));
 
-  ReportCUDAErrors(cudaMemcpy(cuda_weights, weights.data(), weights_size,
-                              cudaMemcpyHostToDevice));
-  ReportCUDAErrors(cudaMemcpy(cuda_biases, biases.data(), biases_size,
+  ReportCUDAErrors(cudaMemcpy(cuda_weights, weights.data(), w_s,
                               cudaMemcpyHostToDevice));
   is_loaded = true;
 }

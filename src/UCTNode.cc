@@ -1,32 +1,3 @@
-/*
-    This file is part of Leela Zero.
-    Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
-
-    Leela Zero is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Leela Zero is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
-
-    Additional permission under GNU GPL version 3 section 7
-
-    If you modify this Program, or any covered work, by linking or
-    combining it with NVIDIA Corporation's libraries from the
-    NVIDIA CUDA Toolkit and/or the NVIDIA CUDA Deep Neural
-    Network library and/or the NVIDIA TensorRT inference library
-    (or a modified version of those libraries), containing parts covered
-    by the terms of the respective license agreement, the licensors of
-    this Program grant you additional permission to convey the resulting
-    work.
-*/
-
 #include "UCTNode.h"
 #include "Board.h"
 #include "Random.h"
@@ -46,64 +17,78 @@
 #include <utility>
 #include <vector>
 
-static std::mutex tree_mutex;
+
+static std::mutex data_mutex;
+static std::mutex node_tree_mutex;
+static std::mutex edge_tree_mutex;
+
+
+size_t DataBuffer::node_data_size = 0;
+
+DataBuffer::DataBuffer() {
+  filled_invalid_data();
+  increment_size(sizeof(DataBuffer));
+}
+
+DataBuffer::~DataBuffer() {
+  decrement_size(sizeof(DataBuffer));
+}
+
+void DataBuffer::filled_invalid_data() {
+  delta = 1.0f;
+  vertex = Board::PASS;
+  policy = 0.0f;
+}
+
+
+void DataBuffer::increment_size(size_t sz) {
+  std::lock_guard<std::mutex> lock(data_mutex);
+  node_data_size += sz;
+}
+
+void DataBuffer::decrement_size(size_t sz) {
+  std::lock_guard<std::mutex> lock(data_mutex);
+  node_data_size -= sz;
+}
 
 size_t Edge::edge_tree_size = 0;
-size_t Edge::edge_node_count = 0;
 
-Edge::Edge(int put_vertex, float put_policy, float put_delta) {
-  policy = put_policy;
-  vertex = put_vertex;
-  delta = put_delta;
+Edge::Edge(std::shared_ptr<DataBuffer> data) {
+
+  m_data = data;
   m_pointer = UNINFLATED;
 
   increment_tree_size(sizeof(Edge));
-  increment_tree_count(1);
 }
 
 Edge::Edge(Edge &&n) {
   auto nv = std::atomic_exchange(&n.m_pointer, INVALID);
   auto v = std::atomic_exchange(&m_pointer, nv);
 
-  policy = n.policy;
-  vertex = n.vertex;
-  delta = n.delta;
+  m_data = n.m_data;
 
   increment_tree_size(sizeof(Edge));
-  increment_tree_count(1);
   assert(v == INVALID);
 }
 
 Edge::~Edge() {
   if (is_pointer(m_pointer)) {
     increment_tree_size(sizeof(Edge));
-    increment_tree_count(1);
     delete read_ptr(m_pointer);
   }
   decrement_tree_size(sizeof(Edge));
-  decrement_tree_count(1);
 }
 
-void Edge::set_policy(float put_policy) { policy = put_policy; }
+void Edge::set_policy(float policy) { m_data->policy = policy; }
 
 void Edge::increment_tree_size(size_t sz) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
+  std::lock_guard<std::mutex> lock(edge_tree_mutex);
   edge_tree_size += sz;
 }
 
 void Edge::decrement_tree_size(size_t sz) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
+  std::lock_guard<std::mutex> lock(edge_tree_mutex);
   edge_tree_size -= sz;
-}
-
-void Edge::increment_tree_count(size_t ct) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
-  edge_node_count += ct;
-}
-
-void Edge::decrement_tree_count(size_t ct) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
-  edge_node_count -= ct;
 }
 
 void Edge::inflate() {
@@ -113,12 +98,12 @@ void Edge::inflate() {
       return;
     auto ori_ponter = m_pointer.load();
     auto new_ponter =
-        reinterpret_cast<std::uint64_t>(new UCTNode(delta, vertex, policy)) |
+        reinterpret_cast<std::uint64_t>(new UCTNode(&m_data)) |
         POINTER;
+    
     bool success = m_pointer.compare_exchange_strong(ori_ponter, new_ponter);
     if (success) {
       decrement_tree_size(sizeof(Edge));
-      decrement_tree_count(1);
       return;
     } else {
       delete read_ptr(new_ponter);
@@ -181,7 +166,9 @@ int Edge::get_visits() const {
 
 float Edge::get_eval(int color) const {
   auto v = m_pointer.load();
-  assert(is_pointer(v));
+  if (!is_pointer(v)) {
+    return 0.0f;
+  }
   return read_ptr(v)->get_eval(color);
 }
 
@@ -192,33 +179,36 @@ UCTNode *Edge::get_node() const {
 }
 
 size_t UCTNode::node_tree_size = 0;
-size_t UCTNode::node_node_count = 0;
 
-UCTNode::UCTNode(float delta_loss, int vertex, float policy) {
-  m_delta_loss = delta_loss;
-  m_vertex = vertex;
-  m_policy = policy;
+UCTNode::UCTNode(std::shared_ptr<DataBuffer> *data) {
+
+  m_data = *data;
+  m_delta_loss = m_data->delta;
+  m_vertex = m_data->vertex;
+  m_policy = m_data->policy;
+
   increment_tree_size(sizeof(UCTNode));
-  increment_tree_count(1);
 }
 
 UCTNode::~UCTNode() {
   decrement_tree_size(sizeof(UCTNode));
-  decrement_tree_count(1);
 }
 
 bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
-                              float &eval, float min_psa_ratio) {
+                              float &eval, float min_psa_ratio, bool kill_superkos) {
 
+
+  // 防止無效的父節點產生，每個父節點至少要一個子節點
+  assert(state.board.get_passes() < 2);
+  /*
+  if (state.board.get_passes() >= 2) {
+    return false;
+  }
+  */
   if (!expandable()) {
     return false;
   }
 
-  if (state.board.get_passes() >= 2) {
-    return false;
-  }
-
-  // acquire the lock
   if (!acquire_expanding()) {
     return false;
   }
@@ -228,12 +218,13 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
 
   const float stm_eval = raw_netlist.winrate[0];
   const auto to_move = state.board.get_to_move();
+  m_color = to_move;
   if (to_move == Board::WHITE) {
-    m_raw_eval = 1.0f - stm_eval;
+    m_raw_black_eval = 1.0f - stm_eval;
   } else {
-    m_raw_eval = stm_eval;
+    m_raw_black_eval = stm_eval;
   }
-  eval = m_raw_eval;
+  eval = m_raw_black_eval;
 
   std::vector<Network::PolicyVertexPair> nodelist;
 
@@ -242,18 +233,33 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
   for (int i = 0; i < NUM_INTERSECTIONS; i++) {
     const int x = i % BOARD_SIZE;
     const int y = i / BOARD_SIZE;
-    const int vertex = state.board.get_vertex(x, y);
+    const auto vertex = state.board.get_vertex(x, y);
+    const auto policy = raw_netlist.policy[i];
     if (state.board.is_legal(vertex, to_move)) {
-      nodelist.emplace_back(raw_netlist.policy[i], vertex);
-      legal_sum += raw_netlist.policy[i];
+      if (kill_superkos) {
+	    auto smi_state = std::make_shared<GameState>(state);
+	    if (!smi_state->play_move(vertex)) {
+	      continue;
+	    }
+        if (smi_state->superko()) { 
+          continue;
+	    }
+      }
+
+      nodelist.emplace_back(policy, vertex);
+      legal_sum += policy;
       legal_count++;
     }
   }
   assert(cfg_allow_pass_ratio != 0.0f);
+
   if (legal_count <= (NUM_INTERSECTIONS * cfg_allow_pass_ratio)) {
     nodelist.emplace_back(raw_netlist.policy_pass, Board::PASS);
     legal_sum += raw_netlist.policy_pass;
   }
+
+  assert(legal_sum != 0.0f);
+
   for (auto &node : nodelist) {
     node.first /= legal_sum;
   }
@@ -265,38 +271,45 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
 
 void UCTNode::link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
                             float min_psa_ratio) {
-
-  if (nodelist.empty()) {
-    return;
-  }
   std::stable_sort(rbegin(nodelist), rend(nodelist));
-  // const float max_psa = nodelist[0].first * min_psa_ratio;
+
   const float min_psa = nodelist[0].first * min_psa_ratio;
   for (const auto &node : nodelist) {
     if (node.first < min_psa) {
       break;
     } else {
-      m_children.emplace_back(node.second, node.first,
-                              m_delta_loss * cfg_delta_attenuation_ratio);
+      auto data = std::make_shared<DataBuffer>();
+      data->vertex = node.second;
+      data->policy = node.first;
+      data->delta = m_delta_loss * cfg_delta_attenuation_ratio;
+
+      m_children.emplace_back(data);
     }
   }
+  assert(!m_children.empty());
 }
 
 int UCTNode::get_visits() const { return m_visits; }
 
 float UCTNode::get_raw_evaluation(int color) const {
   if (color == Board::BLACK) {
-    return m_raw_eval;
+    return m_raw_black_eval;
   }
-  return 1.0f - m_raw_eval;
+  return 1.0f - m_raw_black_eval;
 }
 
-float UCTNode::get_accumulated_evals() const { return m_accumulated_evals; }
+float UCTNode::get_accumulated_evals() const { return m_accumulated_black_evals; }
+
+int UCTNode::get_color() const { return m_color; }
 
 int UCTNode::get_vertex() const { return m_vertex; }
+
 float UCTNode::get_policy() const { return m_policy; }
 
-void UCTNode::increment_virtual_loss() { m_virtual_loss += VIRTUAL_LOSS_COUNT; }
+void UCTNode::increment_virtual_loss() { 
+  m_virtual_loss += VIRTUAL_LOSS_COUNT;
+  assert(m_virtual_loss >= 0);
+}
 
 void UCTNode::decrement_virtual_loss() {
   m_virtual_loss -= VIRTUAL_LOSS_COUNT;
@@ -335,6 +348,7 @@ bool UCTNode::prune_child(int vtx) {
 
 UCTNode *UCTNode::uct_select_child(int color, bool is_root) {
   wait_expanded();
+  assert(has_children());
 
   int parentvisits = 0;
   double total_visited_policy = 0.0f;
@@ -371,10 +385,10 @@ UCTNode *UCTNode::uct_select_child(int color, bool is_root) {
     } else if (child.get_visits() > 0) {
       winrate = child.get_eval(color);
     }
-    const auto psa = child.get_policy();
-    const auto denom = 1.0 + child.get_visits();
-    const auto puct = cfg_puct * psa * (numerator / denom);
-    const auto value = winrate + puct;
+    const double psa = child.get_policy();
+    const double denom = 1.0 + child.get_visits();
+    const double puct = cfg_puct * psa * (numerator / denom);
+    const double value = winrate + puct;
     assert(value > std::numeric_limits<double>::lowest());
 
     if (value > best_value) {
@@ -418,47 +432,8 @@ void UCTNode::dirichlet_noise(float epsilon, float alpha) {
   }
 }
 
-
-void UCTNode::kill_superkos(const GameState &state) {
-  Edge *pass_child = nullptr;
-  size_t valid_count = 0;
-
-  for (auto &child : m_children) {
-    auto vtx = child.get_vertex();
-    if (vtx != Board::PASS) {
-      auto smi_state = std::make_shared<GameState>(state);
-      if (!smi_state->play_move(vtx)) {
-        child.kill_node();
-      }
-
-      if (smi_state->superko()) {
-        child.kill_node();
-      }
-    } else {
-      pass_child = &child;
-    }
-    if (child.is_valid()) {
-      valid_count++;
-    }
-  }
-  /*
-if (valid_count > 1 && pass_child &&
-      !state.is_move_legal(state.get_to_move(), Board::PASS)) {
-  // Remove the PASS node according to "avoid" -- but only if there are
-  // other valid nodes left.
-  (*pass_child)->invalidate();
-}
-  */
-  // Now do the actual deletion.
-  m_children.erase(
-      std::remove_if(begin(m_children), end(m_children),
-                     [](const auto &child) { return !child.is_valid(); }),
-      end(m_children));
-}
-
 int UCTNode::get_most_visits_move() {
   wait_expanded();
-
   assert(has_children());
 
   int most_visits = std::numeric_limits<int>::lowest();
@@ -495,13 +470,34 @@ UCTNode *UCTNode::get_most_visits_child() {
   return most_child->get_node();
 }
 
+UCTNode *UCTNode::get_child(const int vtx) {
+  wait_expanded();
+  assert(has_children());
 
-void UCTNode::accumulate_eval(float eval) {
-  Utils::atomic_add(m_accumulated_evals, eval);
+  Edge *res = nullptr;
+
+  for (auto &child : m_children) { 
+    const int vertex = child.get_vertex();
+    if (vtx == vertex) {
+      res = &child;
+      break;
+    }
+  }
+
+  assert(res != nullptr);
+  res->inflate();
+  return res->get_node();
+  
 }
 
+
+void UCTNode::accumulate_eval(float eval) {
+  Utils::atomic_add(m_accumulated_black_evals, eval);
+}
+
+
 void UCTNode::update(float eval) {
-  float old_eval = m_accumulated_evals;
+  float old_eval = m_accumulated_black_evals;
   float old_visits = m_visits.load();
   float old_delta = old_visits > 0 ? eval - old_eval / old_visits : 0.0f;
   m_visits++;
@@ -515,15 +511,16 @@ void UCTNode::update(float eval) {
 float UCTNode::prepare_root_node(Evaluation &evaluation, GameState &state) {
 
   float root_eval;
-  bool success = expend_children(evaluation, state, root_eval, 0.0f);
+  const bool kill_superkos = true;
+
+  bool success = expend_children(evaluation, state, root_eval, 0.0f, kill_superkos);
   bool had_childen = has_children();
   assert(success && had_childen);
 
   if (success && had_childen) {
     inflate_all_children();
-    kill_superkos(state);
 
-    if (cfg_noise) {
+    if (cfg_dirichlet_noise) {
       float alpha = 0.03f * 361.0f / NUM_INTERSECTIONS;
       dirichlet_noise(0.25f, alpha);
     }
@@ -532,7 +529,7 @@ float UCTNode::prepare_root_node(Evaluation &evaluation, GameState &state) {
   return root_eval;
 }
 
-bool UCTNode::has_children() const { return m_children.size(); }
+bool UCTNode::has_children() const { return m_color != Board::EMPTY; }
 
 void UCTNode::set_active(const bool active) {
   if (is_valid()) {
@@ -547,24 +544,73 @@ void UCTNode::invalinode() {
 }
 
 void UCTNode::increment_tree_size(size_t sz) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
+  std::lock_guard<std::mutex> lock(node_tree_mutex);
   node_tree_size += sz;
 }
 void UCTNode::decrement_tree_size(size_t sz) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
+  std::lock_guard<std::mutex> lock(node_tree_mutex);
   node_tree_size -= sz;
 }
 
-void UCTNode::increment_tree_count(size_t ct) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
-  node_node_count += ct;
-}
-void UCTNode::decrement_tree_count(size_t ct) {
-  std::lock_guard<std::mutex> lock(tree_mutex);
-  node_node_count -= ct;
+UCTNode *UCTNode::get_node() { return this; }
+
+float UCTNode::get_eval_variance(float default_var) const {
+  return m_visits > 1 ? m_squared_eval_diff / (m_visits - 1) : default_var;
 }
 
-UCTNode *UCTNode::get_node() { return this; }
+float UCTNode::get_eval_lcb(int color) const {
+  // Lower confidence bound of winrate.
+  float visits = get_visits();
+  if (visits < 2.0f) {
+      // Return large negative value if not enough visits.
+      return get_policy() - 1e6f;
+  }
+  float mean = get_raw_evaluation(color);
+
+  float stddev = std::sqrt(get_eval_variance(1.0f) / visits);
+  float z = Utils::cached_t_quantile(visits - 1);
+
+  return mean - z * stddev;
+}
+
+
+std::vector<std::pair<float, int>> UCTNode::get_lcb_list() {
+  wait_expanded();
+  assert(has_children());
+  
+  std::vector<std::pair<float, int>> list;
+  inflate_all_children();
+
+  for (auto & child : m_children) {
+    const auto vertex = child.get_vertex();
+    const auto lcb = child->get_eval_lcb(m_color);
+    list.emplace_back(lcb, vertex);
+  }
+
+  std::stable_sort(rbegin(list), rend(list));
+  return list;
+}
+
+int UCTNode::get_best_move() {
+  auto lcblist = get_lcb_list();
+
+  float best_value = std::numeric_limits<float>::lowest();
+  int best_move = Board::NO_VERTEX;
+
+  for (auto &lcb : lcblist) {
+    const auto lcb_value = lcb.first;
+    const auto vertex = lcb.second;
+
+    if (lcb_value > best_value) {
+      best_value = lcb_value;
+      best_move = vertex;
+    }
+  }
+
+  assert(best_move != Board::NO_VERTEX);
+  return best_move;
+}
+
 
 bool UCTNode::acquire_expanding() {
   auto expected = ExpandState::INITIAL;
@@ -595,3 +641,70 @@ void UCTNode::wait_expanded() {
 #endif
   assert(v == ExpandState::EXPANDED);
 }
+
+
+
+void UCT_Information::get_memory_used() {
+  const size_t edge_size = sizeof(Edge);
+  const size_t node_size = sizeof(UCTNode);
+  const size_t data_size = sizeof(DataBuffer);
+
+  const size_t edge_count = Edge::edge_tree_size/edge_size;
+  const size_t node_count = UCTNode::node_tree_size/node_size;
+  const size_t data_count = DataBuffer::node_data_size/data_size;
+  const size_t memory_size = Edge::edge_tree_size + UCTNode::node_tree_size + DataBuffer::node_data_size;
+
+  Utils::auto_printf("Edge : %zu counts\n", edge_count);
+  Utils::auto_printf("Node : %zu counts\n", node_count);
+  Utils::auto_printf("Data : %zu counts\n", data_count);
+  Utils::auto_printf("memory : %0.5f (KiB)\n", (float)memory_size / 1024.f);
+}
+
+void UCT_Information::dump_stats(UCTNode *node, GameState & state) {
+  const auto lcblist = node->get_lcb_list();
+  const auto color = state.board.get_to_move(); 
+  const auto parentsVisits = static_cast<float>(node->get_visits());
+  assert(color == node->get_color());
+  for (auto &lcb : lcblist) {
+    const auto lcb_value = lcb.first > 0.0f ? lcb.first : 0.0f;
+    const auto vtx = lcb.second;
+    
+    auto child = node->get_child(vtx);
+    const auto visits = child->get_visits();
+    if (visits != 0) {
+      const auto eval = child->get_eval(color);
+      const auto move = state.vertex_to_string(vtx);
+      const auto pv_string = move + " " + pv_to_srting(child, state);
+      const float visit_ratio = static_cast<float>(visits) / parentsVisits;
+      Utils::auto_printf("%4s -> %7d (V: %5.2f%%) (LCB: %5.2f%%) (N: %5.2f%%) PV: %s\n", 
+                          move.c_str(),
+                          visits,
+                          eval * 100.f, 
+                          lcb_value * 100.f,
+                          visit_ratio * 100.f,
+                          pv_string.c_str());
+    }
+  }
+}
+
+
+
+std::string UCT_Information::pv_to_srting(UCTNode *node, GameState & state) {
+  auto pvlist = std::vector<int>{};
+  auto *next = node;
+  while (next->has_children()) {
+    int vtx = next->get_best_move();
+    pvlist.emplace_back(vtx);
+    next = next->get_child(vtx);
+  }
+  
+
+  auto res = std::string{};
+  for (auto &vtx : pvlist) {
+    res += state.vertex_to_string(vtx);
+    res += " ";
+  }
+  return res;
+}
+
+

@@ -119,11 +119,11 @@ public:
                       const std::vector<float> &biases,
                       std::vector<float> &output, bool ReLU);
 };
-
+/*
 void ApplySEUnit(const size_t channels, const size_t se_fc_outputs,
                  const float *input, const float *residual,
                  const float *weights_w1, const float *weights_b1,
                  const float *weights_w2, const float *weights_b2,
                  float *output);
-
+*/
 #endif

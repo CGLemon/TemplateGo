@@ -23,26 +23,15 @@ using namespace Utils;
 
 Evaluation* evaluation;
 
-std::string gtp_vertex_parser(int vertex) {
-
-  if (vertex == Board::PASS) {
-    return std::string{"pass"};
-  } else if (vertex == Board::RESIGN) {
-    return std::string{"resign"};
-  }
-  const int x = vertex % (cfg_boardsize + 2);
-  const int y = vertex / (cfg_boardsize + 2);
-
-  auto res = std::string{};
-  char x_char = x + 64;
-  if (x_char >= 'I') {
-    x_char++;
-  }
-  auto y_str = std::to_string(y);
-
-  res += x_char;
-  res += y_str;
-  return res;
+std::string gtp_vertex_parser(int vertex, GameState & state) {
+  assert(cfg_boardsize == state.board.get_boardsize());
+  const int max_vertex = (cfg_boardsize+2)*(cfg_boardsize+2);
+  if ((vertex >= 0 && vertex < max_vertex) || vertex == Board::PASS || vertex == Board::RESIGN) {
+    return state.vertex_to_string(vertex);
+  } else if (vertex == Board::NO_VERTEX) {
+    return std::string{"no-vertex"};
+  } 
+  return std::string{"vertex-erro"};
 }
 
 void gtp::gtp_init_all(int argc, char **argv) {
@@ -58,7 +47,7 @@ void gtp::gtp_init_all(int argc, char **argv) {
                PROGRAM_NAME.c_str());
 }
 
-void gtp::execute(std::string input, GameState &state) {
+void gtp::execute(std::string input, GameState & state) {
 
   bool normal_success = normal_execute(input, state);
   if (normal_success) {
@@ -226,8 +215,8 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
     cmd_stream >> color;
     int to_move;
     if (cmd_stream.fail()) {
-      int move = search->think(Search::strategy_t::NN_DIRECT);
-      auto res = gtp_vertex_parser(move);
+      int move = search->think(Search::strategy_t::NN_UCT);
+      auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
       state.play_move(move);
       state.exchange_to_move();
@@ -241,7 +230,7 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
         return true;
       }
       int move = search->think(Search::strategy_t::NN_DIRECT);
-      auto res = gtp_vertex_parser(move);
+      auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
       state.play_move(move, to_move);
     }
@@ -261,6 +250,24 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
       cfg_byostones = std::stoi(byo_yomi_stones);
 
       gtp_printf("\n");
+    } else {
+      gtp_fail_printf("syntax not understood\n");
+    }
+  } else if (cmd == "evaluation") {
+    std::string type;
+    cmd_stream >> type;
+    if (cmd_stream.fail()) {
+      int move = search->think(Search::strategy_t::NN_DIRECT);
+      auto res = gtp_vertex_parser(move, state);
+      gtp_printf("%s\n", res.c_str());
+    } else if (type == "nn-uct") {
+      int move = search->think(Search::strategy_t::NN_UCT);
+      auto res = gtp_vertex_parser(move, state);
+      gtp_printf("%s\n", res.c_str());
+    } else if (type == "nn-direct") {
+      int move = search->think(Search::strategy_t::NN_DIRECT);
+      auto res = gtp_vertex_parser(move, state);
+      gtp_printf("%s\n", res.c_str());
     } else {
       gtp_fail_printf("syntax not understood\n");
     }

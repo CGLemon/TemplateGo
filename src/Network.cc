@@ -426,6 +426,8 @@ void Network::initialize(int playouts, const std::string &weightsfile,
   auto_printf("Pushing Network is complete.\n");
 }
 
+
+// TODO: probe_cache 在後期不需要翻轉
 bool Network::probe_cache(const GameState *const state,
                           Network::Netresult &result) {
   if (m_nncache.lookup(state->board.get_hash(), result)) {

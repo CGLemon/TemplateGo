@@ -484,13 +484,13 @@ static void apply_se(const size_t channels, const float *input,
     }
   }
 }
-
+/*
 void ApplySEUnit(const size_t channels, const size_t se_fc_outputs,
                  const float *input, const float *residual,
                  const float *weights_w1, const float *weights_b1,
                  const float *weights_w2, const float *weights_b2,
                  float *output) {
-  /*
+  
   std::vector<float> pool(2 * channels * batch_size);
   std::vector<float> fc_out1(batch_size * se_fc_outputs);
 
@@ -507,5 +507,5 @@ void ApplySEUnit(const size_t channels, const size_t se_fc_outputs,
                      false,  // Relu Off
                      pool.data());
 
-  */
-}
+  
+}*/

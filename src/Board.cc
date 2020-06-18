@@ -408,6 +408,21 @@ std::string Board::hash_to_string() const {
   return res;
 }
 
+std::string Board::to_move_to_string() const {
+  auto res = std::string{};
+  if (m_tomove == Board::BLACK) {
+    res += "Black to move";
+    res += "\n";
+  } else if (m_tomove == Board::WHITE) {
+    res += "White to move";
+    res += "\n";
+  } else {
+    res += "Error to move";
+    res += "\n";
+  }
+  return res;
+}
+
 void Board::text_display() {
   auto res = board_to_string(m_lastmove);
   auto_printf("%s\n", res.c_str());
@@ -878,7 +893,6 @@ bool Board::is_avoid_to_move(Board::avoid_t avoid, const int vtx,
   } else if (avoid == avoid_t::REAL_EYE) {
     return is_real_eye(vtx, color);
   }
-
   return false;
 }
 
@@ -912,3 +926,24 @@ std::uint64_t Board::get_hash() const { return m_hash; }
 int Board::get_passes() const { return m_passes; }
 
 int Board::get_movenum() const { return m_movenum; }
+
+std::string Board::vertex_to_string(int vertex) const {
+  if (vertex == Board::PASS) {
+    return std::string{"pass"};
+  } else if (vertex == Board::RESIGN) {
+    return std::string{"resign"};
+  }
+  const int x = vertex % (m_boardsize + 2);
+  const int y = vertex / (m_boardsize + 2);
+
+  auto res = std::string{};
+  char x_char = x + 64;
+  if (x_char >= 'I') {
+    x_char++;
+  }
+  auto y_str = std::to_string(y);
+
+  res += x_char;
+  res += y_str;
+  return res;
+}

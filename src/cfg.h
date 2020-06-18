@@ -15,13 +15,14 @@ extern float cfg_softmax_temp;
 extern int cfg_cache_moves;
 
 extern std::string cfg_weightsfile;
+extern int cfg_uct_threads;
 extern float cfg_fpu_root_reduction;
 extern float cfg_fpu_reduction;
 extern float cfg_logpuct;
 extern float cfg_puct;
 extern float cfg_logconst;
 
-extern bool cfg_noise;
+extern bool cfg_dirichlet_noise;
 extern float cfg_delta_attenuation_ratio;
 
 extern int cfg_maintime;

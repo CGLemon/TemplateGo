@@ -147,10 +147,16 @@ std::string GameState::display_to_string() const {
   res += "\n";
   res += board.prisoners_to_string();
   res += "\n";
+  res += board.to_move_to_string();
+  res += "\n";
   res += board.board_to_string(board.get_last_move());
   res += "\n";
   res += board.hash_to_string();
   return res;
+}
+
+std::string GameState::vertex_to_string(int vertex) const {
+  return board.vertex_to_string(vertex);
 }
 
 float GameState::final_score(Board::rule_t rule) {

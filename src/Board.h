@@ -88,6 +88,7 @@ public:
   std::string columns_to_string(const int bsize) const;
   std::string prisoners_to_string() const;
   std::string hash_to_string() const;
+  std::string to_move_to_string() const;
   void text_display();
   void display_chain();
   /*
@@ -160,6 +161,9 @@ public:
   int calc_reach_color(int color, int spread_color, std::vector<bool> &bd,
                        bool is_territory) const;
   float area_score(float komi, rule_t = rule_t::Tromp_Taylor);
+
+  std::string vertex_to_string(int vertex) const;
+
 
   /*
   / TODO: seki 在非常特殊的情況下會搜尋失敗

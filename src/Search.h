@@ -13,9 +13,9 @@ public:
   float eval() const { return m_eval; }
   static SearchResult from_eval(float eval) { return SearchResult(eval); }
   static SearchResult from_score(float board_score) {
-    if (board_score > 0.0f) {
+    if (board_score > (0.0f+m_error)) {
       return SearchResult(1.0f);
-    } else if (board_score < 0.0f) {
+    } else if (board_score < (0.0f-m_error)) {
       return SearchResult(0.0f);
     } else {
       return SearchResult(0.5f);
@@ -26,6 +26,7 @@ private:
   explicit SearchResult(float eval) : m_valid(true), m_eval(eval) {}
   bool m_valid{false};
   float m_eval{0.0f};
+  static constexpr float m_error{1e-4f};
 };
 
 class Search {
@@ -49,15 +50,15 @@ public:
 
   float get_min_psa_ratio() const;
   void increment_playouts();
-  bool is_running();
+  bool is_uct_running();
 private:
   Evaluation &m_evaluation;
   GameState &m_rootstate;
 
-  std::atomic<bool> m_running;
   int m_maxplayouts;
   std::atomic<int> m_playouts;
 };
+
 
 class UCTWorker {
 public:

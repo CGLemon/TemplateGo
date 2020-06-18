@@ -21,6 +21,7 @@ public:
 
   void display() const;
   std::string display_to_string() const;
+  std::string vertex_to_string(int vertex) const;
 
   bool play_textmove(std::string input);
   const std::shared_ptr<Board> get_past_board(int moves_ago) const;

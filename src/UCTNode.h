@@ -1,40 +1,28 @@
 #ifndef UCTNODE_H_INCLUDE
 #define UCTNODE_H_INCLUDE
 
-/*
-    This file is part of Leela Zero.
-    Copyright (C) 2017-2019 Gian-Carlo Pascutto and contributors
-
-    Leela Zero is free software: you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
-    (at your option) any later version.
-
-    Leela Zero is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with Leela Zero.  If not, see <http://www.gnu.org/licenses/>.
-
-    Additional permission under GNU GPL version 3 section 7
-
-    If you modify this Program, or any covered work, by linking or
-    combining it with NVIDIA Corporation's libraries from the
-    NVIDIA CUDA Toolkit and/or the NVIDIA CUDA Deep Neural
-    Network library and/or the NVIDIA TensorRT inference library
-    (or a modified version of those libraries), containing parts covered
-    by the terms of the respective license agreement, the licensors of
-    this Program grant you additional permission to convey the resulting
-    work.
-*/
-
 #include "Evaluation.h"
 #include "GameState.h"
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
+
+struct DataBuffer {
+  DataBuffer();
+  ~DataBuffer();
+  static size_t node_data_size;
+
+  static void increment_size(size_t sz);
+  static void decrement_size(size_t sz);
+
+  float delta;
+  float policy;
+  int vertex;
+  
+  void filled_invalid_data();
+};
+
 
 class UCTNode;
 
@@ -42,24 +30,21 @@ class UCTNode;
 
 class Edge {
 public:
-  Edge(int vertex, float policy, float delta);
+  Edge(std::shared_ptr<DataBuffer> data);
   ~Edge();
   Edge(Edge &&n);
   Edge(const Edge &) = delete;
 
   static size_t edge_tree_size;
-  static size_t edge_node_count;
   static void increment_tree_size(size_t sz);
   static void decrement_tree_size(size_t sz);
-  static void increment_tree_count(size_t ct);
-  static void decrement_tree_count(size_t ct);
 
   void set_policy(float policy);
 
   int get_vertex() const;
-  float get_policy() const;
+  float get_policy() const;         
   int get_visits() const;
-  float get_eval(int color) const;
+  float get_eval(int color) const;  // 將會刪除？
 
   void inflate();
   void kill_node();
@@ -79,20 +64,17 @@ public:
   UCTNode *get_node() const;
 
   UCTNode *operator->() const {
-    assert(is_pointer());
     return read_ptr(m_pointer.load()); 
   }
 
   Edge &operator=(Edge &&n);
 
 private:
+  std::shared_ptr<DataBuffer> m_data;
+
   static constexpr std::uint64_t INVALID = 2;
   static constexpr std::uint64_t UNINFLATED = 1;
   static constexpr std::uint64_t POINTER = 0;
-
-  float delta;
-  float policy;
-  int vertex;
 
   std::atomic<std::uint64_t> m_pointer{INVALID};
 
@@ -115,9 +97,9 @@ inline bool Edge::is_uninflated(std::uint64_t v) const {
   return (v & POINTER_MASK) == UNINFLATED;
 }
 
-inline int Edge::get_vertex() const { return vertex; }
+inline int Edge::get_vertex() const { return m_data->vertex; }
 
-inline float Edge::get_policy() const { return policy; }
+inline float Edge::get_policy() const { return m_data->policy; }
 
 inline UCTNode *Edge::read_ptr(uint64_t v) const {
   assert(is_pointer(v));
@@ -129,18 +111,15 @@ inline UCTNode *Edge::read_ptr(uint64_t v) const {
 class UCTNode {
 public:
   static size_t node_tree_size;
-  static size_t node_node_count;
   static void increment_tree_size(size_t sz);
   static void decrement_tree_size(size_t sz);
-  static void increment_tree_count(size_t ct);
-  static void decrement_tree_count(size_t ct);
 
-  explicit UCTNode(float delta_loss, int vertex, float policy);
+  explicit UCTNode(std::shared_ptr<DataBuffer> *data);
   UCTNode() = delete;
   ~UCTNode();
 
   bool expend_children(Evaluation &evaluation, GameState &state, float &eval,
-                       float min_psa_ratio);
+                       float min_psa_ratio, bool kill_superkos = false);
 
   void link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
                      float min_psa_ratio);
@@ -151,6 +130,7 @@ public:
   int get_visits() const;
   int get_vertex() const;
   float get_policy() const;
+  int get_color() const;
 
   void update(float eval);
   void accumulate_eval(float eval);
@@ -159,8 +139,11 @@ public:
 
   UCTNode *uct_select_child(int color, bool is_node);
   UCTNode *get_most_visits_child();
+  UCTNode *get_node();
 
-  void kill_superkos(const GameState &state);
+  // 一定要有對應 vtx 的子節點
+  UCTNode *get_child(const int vtx);
+
   int get_most_visits_move();
   void dirichlet_noise(float epsilon, float alpha);
   float prepare_root_node(Evaluation &evaluation, GameState &state);
@@ -179,19 +162,30 @@ public:
   bool is_expended() const;
   bool expandable() const;
 
-  UCTNode *get_node();
+  float get_eval_lcb(int color) const;
+  float get_eval_variance(float default_var) const;
+  std::vector<std::pair<float, int>> get_lcb_list();
+  int get_best_move();
+
 
 private:
+  std::shared_ptr<DataBuffer> m_data;
+
   enum Status : std::uint8_t { INVALID, PRUNED, ACTIVE };
   std::atomic<Status> m_status{ACTIVE};  
 
+  int m_color{Board::EMPTY};
   int m_vertex;
   float m_policy;
-  float m_raw_eval{0.0f};
+
+  // m_raw_black_eval 黑方的網路輸出勝率
+  float m_raw_black_eval{0.0f};
   float m_delta_loss;
 
   std::atomic<float> m_squared_eval_diff{1e-4f};
-  std::atomic<float> m_accumulated_evals{0.0};
+
+  // m_accumulated_black_evals 黑方經樹搜索累積的 Q 值
+  std::atomic<float> m_accumulated_black_evals{0.0};
 
   std::vector<Edge> m_children;
 
@@ -201,7 +195,6 @@ private:
   enum class ExpandState : std::uint8_t { INITIAL = 0, EXPANDING, EXPANDED };
 
   std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
-
 
 
   bool acquire_expanding();
@@ -234,4 +227,13 @@ inline bool UCTNode::is_active() const { return m_status.load() == ACTIVE; }
 
 inline bool UCTNode::is_valid() const { return m_status.load() != INVALID; }
 
+
+class UCT_Information {
+public:
+  static void get_memory_used();
+
+  static void dump_stats(UCTNode *node, GameState & state);
+
+  static std::string pv_to_srting(UCTNode *node, GameState & state);
+};
 #endif

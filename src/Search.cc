@@ -36,8 +36,6 @@ int Search::nn_direct_output() {
   auto_printf("policy out : \n");
 
   for (int idx = 0; idx < NUM_INTERSECTIONS; idx++) {
-    // const int x = idx % BOARD_SIZE;
-    // const int y = idx / BOARD_SIZE;
     const auto idx_pair = Network::get_intersections_pair(idx, BOARD_SIZE);
     const int x = idx_pair.first;
     const int y = idx_pair.second;
@@ -77,9 +75,7 @@ void Search::increment_playouts() { m_playouts++; }
 
 SearchResult Search::play_simulation(GameState &currstate, UCTNode *const node,
                                      UCTNode *const root_node) {
-  const auto color = currstate.board.get_to_move();
   auto result = SearchResult{};
-
   node->increment_virtual_loss();
 
   if (node->expandable()) {
@@ -98,11 +94,13 @@ SearchResult Search::play_simulation(GameState &currstate, UCTNode *const node,
   }
 
   if (node->has_children() && !result.valid()) {
+    const int color = currstate.board.get_to_move();
     auto next = node->uct_select_child(color, node == root_node);
     auto move = next->get_vertex();
 
     currstate.play_move(move, color);
     currstate.exchange_to_move();
+
     if (move != Board::PASS && currstate.superko()) {
       next->invalinode();
     } else {
@@ -119,10 +117,6 @@ SearchResult Search::play_simulation(GameState &currstate, UCTNode *const node,
   return result;
 }
 
-bool Search::is_stop_uct_search() const {
-  return m_playouts.load() <= m_maxplayouts;
-}
-
 void Search::updata_root(std::shared_ptr<UCTNode> root_node) {
   float eval = root_node->prepare_root_node(m_evaluation, m_rootstate);
 
@@ -130,40 +124,40 @@ void Search::updata_root(std::shared_ptr<UCTNode> root_node) {
     eval = 1.0f - eval;
   }
   auto_printf("NN eval = ");
-  auto_printf("%f\n", eval);
-  auto_printf("%");
+  auto_printf("%f", eval);
+  auto_printf("%\n");
 }
 
 int Search::uct_search() {
   int select_move;
   {
-    int color = m_rootstate.board.get_to_move();
-
-    auto root_node = std::make_shared<UCTNode>(1.0f, Board::PASS, 0.0f);
-    auto current = std::make_shared<GameState>(m_rootstate);
+    auto root_data = std::make_shared<DataBuffer>();
+    auto root_node = std::make_shared<UCTNode>(&root_data);
 
     updata_root(root_node);
-
+    m_playouts = 0;
     do {
+      auto current = std::make_shared<GameState>(m_rootstate);
       increment_playouts();
       play_simulation(*current, root_node.get(), root_node.get());
-      m_running = is_stop_uct_search();
-    } while (m_running);
+    } while (is_uct_running());
 
-    select_move = root_node->get_most_visits_move();
+    select_move = root_node->get_best_move();
+    UCT_Information::dump_stats(root_node.get(), m_rootstate);
   }
 
   assert(Edge::edge_tree_size == 0);
-  assert(Edge::edge_node_count == 0);
   assert(UCTNode::node_tree_size == 0);
-  assert(UCTNode::node_node_count == 0);
+  assert(DataBuffer::node_data_size == 0);
 
   return select_move;
 }
 
-bool Search::is_running() {
 
-  return false;
+
+bool Search::is_uct_running() {
+  bool keep_running = m_playouts.load() < m_maxplayouts;
+  return keep_running;
 }
 
 void UCTWorker::operator()() {
@@ -173,5 +167,5 @@ void UCTWorker::operator()() {
         if (result.valid()) {
             m_search->increment_playouts();
         }
-    } while (m_search->is_running());
+    } while (m_search->is_uct_running());
 }

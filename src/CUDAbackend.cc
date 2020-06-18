@@ -72,6 +72,7 @@ void CUDAbackend::forward(const std::vector<float> &input,
                           std::vector<float> &output_pol,
                           std::vector<float> &output_val) {
 
+  int batch = 1;
   size_t output_channels = m_input_channels;
 
   size_t input_s = INPUT_CHANNELS * NUM_INTERSECTIONS * sizeof(float);
@@ -82,22 +83,22 @@ void CUDAbackend::forward(const std::vector<float> &input,
 
   ReportCUDAErrors(cudaMemcpy(cuda_input, input.data(), input_s, cudaMemcpyHostToDevice));
 
-  conv_layer[0].Forward(1, cuda_input, cuda_conv_out);
-  batch_layer[0].Forward(1, cuda_conv_out);
+  conv_layer[0].Forward(batch, cuda_input, cuda_conv_out);
+  batch_layer[0].Forward(batch, cuda_conv_out);
   
   for (int i = 1; i < (2*m_residual_blocks+1); i+=2) {
     cuda_swap(cuda_conv_out, cuda_conv_in, swap_s);
-    conv_layer[i].Forward(1, cuda_conv_in, cuda_conv_out);
-    batch_layer[i].Forward(1, cuda_conv_out);
+    conv_layer[i].Forward(batch, cuda_conv_in, cuda_conv_out);
+    batch_layer[i].Forward(batch, cuda_conv_out);
 
     cuda_swap(cuda_conv_in, cuda_res, swap_s);
     cuda_swap(cuda_conv_out, cuda_conv_in, swap_s);
 
-    conv_layer[i+1].Forward(1, cuda_conv_in, cuda_conv_out);
-    batch_layer[i+1].Forward(1, cuda_conv_out, cuda_res);
+    conv_layer[i+1].Forward(batch, cuda_conv_in, cuda_conv_out);
+    batch_layer[i+1].Forward(batch, cuda_conv_out, cuda_res);
   }
-  conv_head[0].Forward(1, cuda_conv_out, cuda_output_pol);
-  conv_head[1].Forward(1, cuda_conv_out, cuda_output_val); 
+  conv_head[0].Forward(batch, cuda_conv_out, cuda_output_pol);
+  conv_head[1].Forward(batch, cuda_conv_out, cuda_output_val); 
 
 
   ReportCUDAErrors(cudaMemcpy(output_pol.data(), cuda_output_pol, output_pol_s, cudaMemcpyDeviceToHost));
@@ -125,12 +126,12 @@ void CUDAbackend::push_weights(
   conv_head.emplace_back(1, 1, m_input_channels, OUTPUTS_VALUE);
 
   for (int i = 0; i < (2*m_residual_blocks+1); ++i) {
-    conv_layer[i].LoadingWeight(weights->m_conv_weights[i], weights->m_conv_biases[i]);
+    conv_layer[i].LoadingWeight(weights->m_conv_weights[i]);
     batch_layer[i].LoadingWeight(weights->m_batchnorm_means[i], weights->m_batchnorm_stddevs[i]);
   }
 
-  conv_head[0].LoadingWeight(weights->m_conv_pol_w, weights->m_conv_pol_b);
-  conv_head[1].LoadingWeight(weights->m_conv_val_w, weights->m_conv_val_b);
+  conv_head[0].LoadingWeight(weights->m_conv_pol_w);
+  conv_head[1].LoadingWeight(weights->m_conv_val_w);
 
   size_t output_channels = m_input_channels;
 

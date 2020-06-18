@@ -139,6 +139,6 @@ template void cuda_batchnorm<float>(float *data, const float *means,
 template void cuda_im2col<float>(int filter_size, int N, int C, int H, int W,
                                  float *data_im, float *data_col);
 
-template void cuda_swap(float *a, float *b, int size);
+template void cuda_swap<float>(float *a, float *b, int size);
 
 #endif
