@@ -10,7 +10,7 @@ GTP 協議的圍棋引擎
 
 # 編譯 on Linux ( Ubuntu )
 
-    $ cd TemplateGO-master
+    $ cd TemplateGo-master
     $ mkdir build
     $ cd build
     $ cmake ..
