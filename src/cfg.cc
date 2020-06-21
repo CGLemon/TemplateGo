@@ -57,6 +57,15 @@ void arg_parser(int argc, char **argv) {
         else
           Utils::auto_printf("%s must be integer.\n", cmd.c_str());
       }
+    } else if (cmd == "-t" || cmd == "--thread") {
+      if ((i + 1) <= argc) {
+        std::string numthreads(argv[(i + 1)]);
+        if (Utils::is_allnumber(numthreads))
+          cfg_uct_threads = std::stoi(numthreads);
+        else
+          Utils::auto_printf("%s must be integer.\n", cmd.c_str());
+      }
+
     }
   }
 }
@@ -70,7 +79,7 @@ void init_cfg() {
   cfg_cache_moves = 5;
 
   cfg_weightsfile = "NO_WEIGHT_FILE";
-  cfg_uct_threads = 1;
+  cfg_uct_threads = 0;
   cfg_fpu_root_reduction = 0.25f;
   cfg_fpu_reduction = 0.25f;
   cfg_logpuct = 0.015f;

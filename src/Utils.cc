@@ -226,9 +226,68 @@ bool Utils::is_float(std::string & stream) {
   return true;
 }
 
+Utils::Timer::Timer() {
+  clock();
+  record_count = 0;
+}
 
+void Utils::Timer::clock() {
+  m_clock_time = std::chrono::steady_clock::now();
+}
 
+int Utils::Timer::get_duration_seconds() const {
+  const auto end_time = std::chrono::steady_clock::now();
+  const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - m_clock_time).count();
+  return seconds;
+}
 
+int Utils::Timer::get_duration_milliseconds() const {
+  const auto end_time = std::chrono::steady_clock::now();
+  const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - m_clock_time).count();
+  return milliseconds;
+}
+
+float Utils::Timer::get_duration() const {
+  const auto seconds = get_duration_seconds();
+  const auto milliseconds = get_duration_milliseconds();
+  if (seconds == (milliseconds/1000)) {
+    return static_cast<float>(milliseconds) / 1000.f;
+  } else {
+    return static_cast<float>(seconds);
+  }
+}
+
+void Utils::Timer::record() {
+  m_record.emplace_back(get_duration());
+  record_count++;
+  assert(m_record.size() == record_count);
+}
+
+void Utils::Timer::release() {
+  m_record.clear();
+  record_count = 0;
+}
+
+float Utils::Timer::get_record_time(int id) const {
+  if (record_count == 0) {
+    return 0.f;
+  }
+  if (id > record_count) {
+    id = record_count;
+  }
+  else if (id <= 0) {
+    id = 1;
+  }
+  return m_record[id-1];
+}
+
+int Utils::Timer::get_record_count() const {
+  return record_count;
+}
+
+float* Utils::Timer::get_record() {
+  return m_record.data();
+}
 
 Utils::Exception::Exception(const std::string &what)
     : std::runtime_error(what) {

@@ -67,7 +67,7 @@ public:
     return read_ptr(m_pointer.load()); 
   }
 
-  Edge &operator=(Edge &&n);
+  //Edge &operator=(Edge &&n);
 
 private:
   std::shared_ptr<DataBuffer> m_data;
@@ -114,7 +114,7 @@ public:
   static void increment_tree_size(size_t sz);
   static void decrement_tree_size(size_t sz);
 
-  explicit UCTNode(std::shared_ptr<DataBuffer> *data);
+  explicit UCTNode(std::shared_ptr<DataBuffer> data);
   UCTNode() = delete;
   ~UCTNode();
 

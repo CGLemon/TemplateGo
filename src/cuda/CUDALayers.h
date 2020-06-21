@@ -39,7 +39,6 @@ public:
   void LoadingWeight(const std::vector<float> &weights);
 
 private:
-  
   static constexpr int width = CONV2D_SIZE;
   static constexpr int height = CONV2D_SIZE;
   static constexpr int spatial_size = width * height;
@@ -54,5 +53,20 @@ private:
   size_t w_s;
   bool is_loaded;
 };
+
+class CudaFullyConnect {
+public:
+  CudaFullyConnect(const size_t batch, const size_t inputs, const size_t outputs);
+
+private:
+  int m_batch;
+  int m_inputs;
+  int m_outputs;
+  bool is_loaded;
+  float cuda_weights;
+  float cuda_biases;
+
+};
+
 #endif
 #endif

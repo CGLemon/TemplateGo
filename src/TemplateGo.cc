@@ -20,8 +20,10 @@ using namespace std;
 void normal_loop() {
 
   auto maingame = std::make_shared<GameState>();
-
   maingame->init_game(cfg_boardsize, cfg_komi);
+
+  gtp::init_network(*maingame);  
+
   while (true) {
     maingame->display();
     auto input = std::string{};

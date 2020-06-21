@@ -22,6 +22,8 @@
 using namespace Utils;
 
 Evaluation* evaluation;
+std::shared_ptr<Search> search;
+
 
 std::string gtp_vertex_parser(int vertex, GameState & state) {
   assert(cfg_boardsize == state.board.get_boardsize());
@@ -39,18 +41,22 @@ void gtp::gtp_init_all(int argc, char **argv) {
   init_cfg();
 
   arg_parser(argc, argv);
-  evaluation = new Evaluation;
-  evaluation->initialize_network(cfg_playouts, cfg_weightsfile);
   
   auto_printf("Warning! The program version is %s. Don't work well now.\n", PROGRAM_VERSION.c_str());
   auto_printf("All parameters are initialize. %s is ready...\n",
                PROGRAM_NAME.c_str());
 }
 
+void gtp::init_network(GameState &state) {
+  evaluation = new Evaluation;
+  evaluation->initialize_network(cfg_playouts, cfg_weightsfile);
+  search = std::make_shared<Search>(state, *evaluation);
+}
+
 void gtp::execute(std::string input, GameState & state) {
 
-  bool normal_success = normal_execute(input, state);
-  if (normal_success) {
+  bool extend_success = extend_execute(input, state);
+  if (extend_success) {
     gtp_printf("\n");
     return;
   }
@@ -63,7 +69,7 @@ void gtp::execute(std::string input, GameState & state) {
   }
 }
 
-bool gtp::normal_execute(std::string input, GameState &state) {
+bool gtp::extend_execute(std::string input, GameState &state) {
 
   std::stringstream cmd_stream(input);
   auto cmd = std::string{};
@@ -92,6 +98,22 @@ bool gtp::normal_execute(std::string input, GameState &state) {
         return true;
       }
     }
+  } else if (cmd == "benchmark") {
+    std::string playouts_str;
+    cmd_stream >> playouts_str;
+
+    if (cmd_stream.fail()) {
+      search->benchmark(cfg_playouts);
+    } else {
+      int playouts;
+      if (is_allnumber(playouts_str)) {
+        playouts = std::stoi(playouts_str);
+      } else {
+        playouts = cfg_playouts;
+      }
+      search->benchmark(playouts);
+    }
+    return true;
   }
 
   return false;
@@ -99,14 +121,12 @@ bool gtp::normal_execute(std::string input, GameState &state) {
 
 bool gtp::gtp_execute(std::string input, GameState &state) {
 
-  static auto search = std::make_shared<Search>(state, *evaluation);
-
   std::stringstream cmd_stream(input);
   auto cmd = std::string{};
 
   cmd_stream >> cmd;
   if (cmd == "quit") {
-    Utils::gtp_printf("\n");
+    gtp_printf("\n");
     delete evaluation;
     exit(EXIT_SUCCESS);
 

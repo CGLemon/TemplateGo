@@ -28,9 +28,10 @@ static const std::vector<std::string> gtp_commands = {"protocol_version",
                                                       "undo"
                                                       ""};
 
+void init_network(GameState &state);
 void execute(std::string input, GameState &state);
 bool gtp_execute(std::string input, GameState &state);
-bool normal_execute(std::string input, GameState &state);
+bool extend_execute(std::string input, GameState &state);
 void gtp_mode();
 
 } // namespace gtp

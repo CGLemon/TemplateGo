@@ -1,4 +1,3 @@
-
 #include <numeric>
 
 #include "Board.h"
@@ -10,9 +9,12 @@
 
 using namespace Utils;
 
+ThreadPool SearchPool;
+
 Search::Search(GameState &state, Evaluation &evaluation)
     : m_rootstate(state), m_evaluation(evaluation) {
   set_playout(cfg_playouts);
+  SearchPool.initialize(this, cfg_uct_threads);
 }
 
 int Search::think(Search::strategy_t strategy) {
@@ -128,27 +130,46 @@ void Search::updata_root(std::shared_ptr<UCTNode> root_node) {
   auto_printf("%\n");
 }
 
+bool check_release(size_t tot_sz, size_t sz, std::string name) {
+  if (tot_sz != 0) {
+    auto_printf("%s size = %zu\n", name.c_str(), tot_sz);
+    auto_printf("%s count = %zu\n", name.c_str(), (tot_sz/sz));
+  } 
+
+  return (tot_sz == 0); 
+}
+
 int Search::uct_search() {
   int select_move;
   {
     auto root_data = std::make_shared<DataBuffer>();
-    auto root_node = std::make_shared<UCTNode>(&root_data);
+    auto root_node = std::make_shared<UCTNode>(root_data);
 
+    m_rootnode = root_node.get();
     updata_root(root_node);
     m_playouts = 0;
+  
+    SearchPool.wakeup();
+
     do {
       auto current = std::make_shared<GameState>(m_rootstate);
-      increment_playouts();
-      play_simulation(*current, root_node.get(), root_node.get());
+      auto result = play_simulation(*current, m_rootnode, m_rootnode);
+      if (result.valid()) {
+        increment_playouts();
+      }
     } while (is_uct_running());
 
-    select_move = root_node->get_best_move();
-    UCT_Information::dump_stats(root_node.get(), m_rootstate);
-  }
+    SearchPool.wait_finish();
 
-  assert(Edge::edge_tree_size == 0);
-  assert(UCTNode::node_tree_size == 0);
-  assert(DataBuffer::node_data_size == 0);
+    select_move = root_node->get_best_move();
+    UCT_Information::dump_stats(m_rootnode, m_rootstate);
+  }
+  
+  bool success = check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
+  success &= check_release(UCTNode::node_tree_size, sizeof(UCTNode), "Node");
+  success &= check_release(DataBuffer::node_data_size, sizeof(DataBuffer), "Data");
+
+  assert(success);
 
   return select_move;
 }
@@ -160,12 +181,72 @@ bool Search::is_uct_running() {
   return keep_running;
 }
 
-void UCTWorker::operator()() {
-    do {
-        auto currstate = std::make_unique<GameState>(m_rootstate);
-        auto result = m_search->play_simulation(*currstate, m_root, m_root);
-        if (result.valid()) {
-            m_search->increment_playouts();
+void Search::benchmark(int playouts) {
+
+  set_playout(playouts);  
+  Timer timer;
+
+  int move = uct_search();
+  float seconds = timer.get_duration();
+
+  auto_printf("playouts : %d\n", m_playouts.load());
+  auto_printf("time : %2.5f seconds\n", seconds);
+
+  set_playout(cfg_playouts);
+}
+
+void ThreadPool::add_thread() {
+  m_threads.emplace_back([this] {
+    while(true) {
+      {
+        m_searching = false;
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_condvar.wait(lock, [this]{ return m_searching; });
+        if (m_exit) {
+          return;
         }
-    } while (m_search->is_uct_running());
+      }
+      worker();
+    }
+  });
+}
+
+void ThreadPool::initialize(Search * search, size_t threads) {
+  m_search = search;
+  for (size_t i = 0; i < threads; i++) {
+    add_thread();
+  }
+}
+
+void ThreadPool::wakeup() {
+  m_searching = true;
+  m_condvar.notify_all();
+}
+
+void ThreadPool::quit() {
+  m_exit = true;
+  wakeup();
+  for (auto &t : m_threads) {
+    t.join();
+  } 
+}
+
+void ThreadPool::wait_finish() {
+  while(m_running_theards.load() != 0) {
+    ;
+  }
+}
+
+
+void ThreadPool::worker() {
+  m_running_theards++;
+  auto m_root = m_search->m_rootnode;
+  do {
+    auto currstate = std::make_unique<GameState>(m_search->m_rootstate);
+    auto result = m_search->play_simulation(*currstate, m_root, m_root);
+    if (result.valid()) {
+      m_search->increment_playouts();
+    }
+  } while(m_search->is_uct_running());
+  m_running_theards--;
 }

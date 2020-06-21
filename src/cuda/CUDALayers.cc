@@ -144,4 +144,12 @@ void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
                               cudaMemcpyHostToDevice));
   is_loaded = true;
 }
+
+CudaFullyConnect::CudaFullyConnect(const size_t batch, const size_t inputs, const size_t outputs) {
+  m_batch = batch;
+  m_inputs = inputs;
+  m_outputs = outputs;
+  is_loaded = false;
+}
+
 #endif

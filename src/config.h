@@ -23,7 +23,7 @@ static_assert(BOARD_SIZE >= MARCRO_MIN_BOARDSIZE, "");
 
 //#define DEBUG_CHECK
 
-static const std::string PROGRAM_NAME = "TemplateGO";
+static const std::string PROGRAM_NAME = "TemplateGo";
 static const std::string PROGRAM_VERSION = "Pre-alpha";
 
 #endif

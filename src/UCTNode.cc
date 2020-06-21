@@ -92,13 +92,12 @@ void Edge::decrement_tree_size(size_t sz) {
 }
 
 void Edge::inflate() {
-
   while (true) {
     if (!is_uninflated(m_pointer.load()))
       return;
     auto ori_ponter = m_pointer.load();
     auto new_ponter =
-        reinterpret_cast<std::uint64_t>(new UCTNode(&m_data)) |
+        reinterpret_cast<std::uint64_t>(new UCTNode(m_data)) |
         POINTER;
     
     bool success = m_pointer.compare_exchange_strong(ori_ponter, new_ponter);
@@ -110,7 +109,7 @@ void Edge::inflate() {
     }
   }
 }
-
+/*
 Edge &Edge::operator=(Edge &&n) {
   auto nv = std::atomic_exchange(&n.m_pointer, INVALID);
   auto v = std::atomic_exchange(&m_pointer, nv);
@@ -119,6 +118,7 @@ Edge &Edge::operator=(Edge &&n) {
   }
   return *this;
 }
+*/
 
 void Edge::prune_node() {
   inflate();
@@ -180,9 +180,9 @@ UCTNode *Edge::get_node() const {
 
 size_t UCTNode::node_tree_size = 0;
 
-UCTNode::UCTNode(std::shared_ptr<DataBuffer> *data) {
+UCTNode::UCTNode(std::shared_ptr<DataBuffer> data) {
 
-  m_data = *data;
+  m_data = data;
   m_delta_loss = m_data->delta;
   m_vertex = m_data->vertex;
   m_policy = m_data->policy;
@@ -204,10 +204,11 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
   if (state.board.get_passes() >= 2) {
     return false;
   }
-  */
-  if (!expandable()) {
+
+  if (is_expending()) {
     return false;
   }
+  */
 
   if (!acquire_expanding()) {
     return false;
@@ -286,10 +287,9 @@ void UCTNode::link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
       m_children.emplace_back(data);
     }
   }
+  inflate_all_children();
   assert(!m_children.empty());
 }
-
-int UCTNode::get_visits() const { return m_visits; }
 
 float UCTNode::get_raw_evaluation(int color) const {
   if (color == Board::BLACK) {
@@ -298,7 +298,9 @@ float UCTNode::get_raw_evaluation(int color) const {
   return 1.0f - m_raw_black_eval;
 }
 
-float UCTNode::get_accumulated_evals() const { return m_accumulated_black_evals; }
+int UCTNode::get_visits() const { return m_visits.load(); }
+
+float UCTNode::get_accumulated_evals() const { return m_accumulated_black_evals.load(); }
 
 int UCTNode::get_color() const { return m_color; }
 
@@ -620,25 +622,17 @@ bool UCTNode::acquire_expanding() {
 
 void UCTNode::expand_done() {
   auto v = m_expand_state.exchange(ExpandState::EXPANDED);
-#ifdef NDEBUG
-  (void)v;
-#endif
   assert(v == ExpandState::EXPANDING);
 }
 void UCTNode::expand_cancel() {
   auto v = m_expand_state.exchange(ExpandState::INITIAL);
-#ifdef NDEBUG
-  (void)v;
-#endif
   assert(v == ExpandState::EXPANDING);
 }
 void UCTNode::wait_expanded() {
   while (m_expand_state.load() == ExpandState::EXPANDING) {
+    ;
   }
   auto v = m_expand_state.load();
-#ifdef NDEBUG
-  (void)v;
-#endif
   assert(v == ExpandState::EXPANDED);
 }
 

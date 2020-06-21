@@ -2,6 +2,10 @@
 #define UTILS_H_DEFINED
 
 #include "config.h"
+
+#include <cassert>
+#include <chrono>
+#include <vector>
 #include <atomic>
 #include <stdexcept>
 #include <string>
@@ -30,6 +34,39 @@ class Exception : public std::runtime_error {
 public:
   Exception(const std::string &what);
 };
+
+
+
+class Timer {
+public:
+  Timer();
+
+  void clock();  
+   
+  int get_duration_seconds() const;
+  
+  int get_duration_milliseconds() const;
+
+  float get_duration() const;
+
+  void record();
+
+  void release();
+
+  float get_record_time(int) const;
+  
+  int get_record_count() const;
+  
+  float* get_record();
+
+private:
+  std::chrono::steady_clock::time_point m_clock_time;
+
+  std::vector<float> m_record;
+
+  size_t record_count;
+};
+
 
 
 }

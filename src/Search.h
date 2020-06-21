@@ -1,10 +1,17 @@
 #ifndef SEARCH_H_INCLUDE
 #define SEARCH_H_INCLUDE
 
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <memory>
+#include <functional>
+
+#include "Search.h"
 #include "Evaluation.h"
 #include "GameState.h"
 #include "UCTNode.h"
-#include "ThreadPool.h"
 
 class SearchResult {
 public:
@@ -21,13 +28,13 @@ public:
       return SearchResult(0.5f);
     }
   }
-
 private:
   explicit SearchResult(float eval) : m_valid(true), m_eval(eval) {}
   bool m_valid{false};
   float m_eval{0.0f};
   static constexpr float m_error{1e-4f};
 };
+
 
 class Search {
 public:
@@ -51,23 +58,44 @@ public:
   float get_min_psa_ratio() const;
   void increment_playouts();
   bool is_uct_running();
-private:
-  Evaluation &m_evaluation;
-  GameState &m_rootstate;
 
+  void benchmark(int playouts);
+
+  GameState & m_rootstate;
+  UCTNode * m_rootnode;
+
+private:
+  Evaluation & m_evaluation;
   int m_maxplayouts;
   std::atomic<int> m_playouts;
 };
 
 
-class UCTWorker {
+class ThreadPool {
+  Search * m_search;
+  std::condition_variable m_condvar;
+  std::mutex m_mutex;
+
+  void worker();
+  void add_thread();
+
+  std::vector<std::thread> m_threads;
+  std::atomic<size_t> m_running_theards{0};
+  bool m_searching{false};
+  bool m_exit{false};
+
 public:
-    UCTWorker(GameState & state, Search * search, UCTNode * root)
-      : m_rootstate(state), m_search(search), m_root(root) {}
-    void operator()();
-private:
-    GameState & m_rootstate;
-    Search * m_search;
-    UCTNode * m_root;
+  ThreadPool() = default;
+  ThreadPool(Search * search, size_t threads)  
+                    {initialize(search, threads); };
+  ~ThreadPool() { quit(); }
+
+  void initialize(Search * search, size_t threads);
+  void wakeup();
+  void quit();
+  void wait_finish();
 };
+
+extern ThreadPool SearchPool;
+
 #endif

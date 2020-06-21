@@ -4,34 +4,46 @@
 #include <array>
 #include <chrono>
 
+#include "Utils.h"
+#include "Board.h"
+#include "string"
+
+using namespace Utils;
+
 class TimeControl {
 public:
   TimeControl(float main_time = 60 * 60 * 100, float byo_yomi_time = 0,
               int byo_yomi_stones = 0);
 
-  void adjust_time(float main_time, float byo_yomi_time, int byo_yomi_stones);
-  void reset_clock();
+  void reset();
+  void check_in_byo();
 
-  void start_clock();
-  float during_seconds();
+  void print_time(int color);
+  void clock();
+  void spend_time(int color);
+  
+  bool is_overtime(int color) const;
+  float get_thinking_time(int color, int boardsize, int num_move) const;  
 
-  void using_seconds(float seconds);
-  bool is_time_out();
-
-  float max_time_to_think(int boardsize, int numnove);
 
 private:
-  float m_main_time;
-  float m_byo_yomi_time;
-  int m_byo_yomi_stones;
+  float m_maintime;
+  float m_byotime;
+  int m_byostones;
 
-  std::chrono::steady_clock::time_point m_start_time;
 
-  float m_remaining_time;
-  float m_periods_left;
-  int m_stones_left;
+  std::array<float, 2> m_maintime_left;
+  std::array<float, 2> m_byotime_left;
+  std::array<int, 2> m_stones_left;
+  std::array<bool, 2> m_inbyo;
 
-  float m_total_remaining_time;
+  Timer m_timer;
+
+
+  bool one_stone_case(int color) const;
+  float one_stone_think_time(int color) const;
+  bool main_time_case(int color) const;
+  float main_time_think_time(int color, int boardsize, int num_move, float lagbuffer_cs) const;
 };
 
 #endif
