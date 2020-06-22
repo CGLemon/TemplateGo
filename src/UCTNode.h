@@ -55,11 +55,14 @@ public:
   bool is_valid() const;
 
   bool is_pointer() const;
-  bool is_invalid() const;
+  bool is_inflating() const;
   bool is_uninflated() const;
+
   bool is_pointer(std::uint64_t) const;
-  bool is_invalid(std::uint64_t) const;
+  bool is_inflating(std::uint64_t) const;
   bool is_uninflated(std::uint64_t) const;
+
+  bool acquire_inflating();
 
   UCTNode *get_node() const;
 
@@ -72,26 +75,26 @@ public:
 private:
   std::shared_ptr<DataBuffer> m_data;
 
-  static constexpr std::uint64_t INVALID = 2;
-  static constexpr std::uint64_t UNINFLATED = 1;
+  static constexpr std::uint64_t UNINFLATED = 2;
+  static constexpr std::uint64_t INFLATING = 1;
   static constexpr std::uint64_t POINTER = 0;
 
-  std::atomic<std::uint64_t> m_pointer{INVALID};
+  std::atomic<std::uint64_t> m_pointer{UNINFLATED};
 
   UCTNode *read_ptr(uint64_t v) const;
 };
 
 inline bool Edge::is_pointer() const { is_pointer(m_pointer.load()); }
 
-inline bool Edge::is_invalid() const { is_invalid(m_pointer.load()); }
+inline bool Edge::is_inflating() const { is_inflating(m_pointer.load()); }
 
 inline bool Edge::is_uninflated() const { is_uninflated(m_pointer.load()); }
 
 inline bool Edge::is_pointer(std::uint64_t v) const {
   return (v & POINTER_MASK) == POINTER;
 }
-inline bool Edge::is_invalid(std::uint64_t v) const {
-  return (v & POINTER_MASK) == INVALID;
+inline bool Edge::is_inflating(std::uint64_t v) const {
+  return (v & POINTER_MASK) == INFLATING;
 }
 inline bool Edge::is_uninflated(std::uint64_t v) const {
   return (v & POINTER_MASK) == UNINFLATED;
@@ -153,6 +156,7 @@ public:
 
   void set_active(const bool active);
   void invalinode();
+
   bool is_pruned() const;
   bool is_valid() const;
   bool is_active() const;

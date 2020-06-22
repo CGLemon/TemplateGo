@@ -62,13 +62,13 @@ Edge::Edge(std::shared_ptr<DataBuffer> data) {
 }
 
 Edge::Edge(Edge &&n) {
-  auto nv = std::atomic_exchange(&n.m_pointer, INVALID);
+  auto nv = std::atomic_exchange(&n.m_pointer, UNINFLATED);
   auto v = std::atomic_exchange(&m_pointer, nv);
 
   m_data = n.m_data;
 
   increment_tree_size(sizeof(Edge));
-  assert(v == INVALID);
+  assert(v == UNINFLATED);
 }
 
 Edge::~Edge() {
@@ -91,22 +91,42 @@ void Edge::decrement_tree_size(size_t sz) {
   edge_tree_size -= sz;
 }
 
+bool Edge::acquire_inflating() {
+  auto uninflated = UNINFLATED;
+  auto newval = INFLATING;
+  return m_pointer.compare_exchange_strong(uninflated, newval);
+}
+
 void Edge::inflate() {
   while (true) {
-    if (!is_uninflated(m_pointer.load()))
+    auto v = m_pointer.load();
+    if (is_pointer(v)) {
       return;
+    }
+    if (!acquire_inflating()) {
+      continue;
+    }
+    auto new_ponter =
+        reinterpret_cast<std::uint64_t>(new UCTNode(m_data)) |
+        POINTER;
+    auto ori_ponter = m_pointer.exchange(new_ponter);
+    decrement_tree_size(sizeof(Edge));
+    assert(is_inflating(ori_ponter));
+    /*
     auto ori_ponter = m_pointer.load();
     auto new_ponter =
         reinterpret_cast<std::uint64_t>(new UCTNode(m_data)) |
         POINTER;
     
     bool success = m_pointer.compare_exchange_strong(ori_ponter, new_ponter);
+
     if (success) {
       decrement_tree_size(sizeof(Edge));
       return;
     } else {
       delete read_ptr(new_ponter);
     }
+    */
   }
 }
 /*
@@ -287,7 +307,7 @@ void UCTNode::link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
       m_children.emplace_back(data);
     }
   }
-  inflate_all_children();
+  // inflate_all_children();
   assert(!m_children.empty());
 }
 
