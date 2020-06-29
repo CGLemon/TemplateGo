@@ -79,6 +79,7 @@ void CUDAbackend::forward(const std::vector<float> &input,
                           std::vector<float> &output_pol,
                           std::vector<float> &output_val) {
 
+  std::lock_guard<std::mutex> lock(m_mtx);
   const size_t batch = 1;
 
   const size_t input_s = LZ::INPUT_CHANNELS * NUM_INTERSECTIONS * sizeof(float);

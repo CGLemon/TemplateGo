@@ -2,7 +2,7 @@
 #ifdef USE_CUDA
 template <typename T>
 __global__ void cuda_addVectors_kernel(T *a, T *b, T *c, int asize, int bsize,
-                                       int csize, bool relu) {
+                                       int size, bool relu) {
   int i = threadIdx.x + blockDim.x * blockIdx.x;
   if (i < size) {
     float aVal = 0;
@@ -19,7 +19,7 @@ __global__ void cuda_addVectors_kernel(T *a, T *b, T *c, int asize, int bsize,
 
 template <typename T>
 void cuda_addVectors(T *a, T *b, T *c, int asize, int bsize,
-                     int csize, bool relu) {
+                     int size, bool relu) {
   const int kBlockSize = KBLOCKSIZE;
   const int blocks = DivUp(size, kBlockSize);
 

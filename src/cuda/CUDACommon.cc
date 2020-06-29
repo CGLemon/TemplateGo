@@ -30,6 +30,17 @@ void CudnnError(cudnnStatus_t status) {
     exit(-1);
   }
 }
+
+cudnnHandle_t cudnn_handle() {
+    static int init[16] = {0};
+    static cudnnHandle_t handle[16];
+    int i = cuda_get_device();
+    if(!init[i]) {
+        cudnnCreate(&handle[i]);
+        init[i] = 1;
+    }
+    return handle[i];
+}
 #endif
 
 int cuda_get_device() {

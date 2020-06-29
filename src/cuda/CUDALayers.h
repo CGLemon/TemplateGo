@@ -56,6 +56,19 @@ private:
   int m_out_channels;
   cublasHandle_t m_cublas;
 
+#ifdef USE_CUDNN
+  void * cuda_scratch;
+  size_t scratch_size;
+  cudnnHandle_t m_cudnn;
+  cudnnFilterDescriptor_t filter_desc;
+  cudnnConvolutionDescriptor_t conv_desc;
+  cudnnTensorDescriptor_t in_tensor_desc;
+  cudnnTensorDescriptor_t out_tensor_desc;
+
+  cudnnConvolutionFwdAlgo_t conv_algo;
+  bool cudnn_applied{false};
+#endif
+
   bool is_loaded{false};
   float *cuda_weights;
   float *cuda_col;

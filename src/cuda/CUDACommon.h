@@ -12,15 +12,21 @@
 
 #define KBLOCKSIZE 256
 
+#ifdef USE_CUDNN
 void CudnnError(cudnnStatus_t status);
+#define ReportCUDNNErrors(status) CudnnError(status)
+cudnnHandle_t cudnn_handle();
+#endif
 void CublasError(cublasStatus_t status);
 void CudaError(cudaError_t status);
 
-#define ReportCUDNNErrors(status) CudnnError(status)
+
 #define ReportCUBLASErrors(status) CublasError(status)
 #define ReportCUDAErrors(status) CudaError(status)
 
 cublasHandle_t blas_handle();
+
+
 
 int cuda_get_device();
 

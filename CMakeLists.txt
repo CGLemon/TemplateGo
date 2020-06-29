@@ -14,7 +14,17 @@ if(GPU_BACKEND STREQUAL "CUDA")
 	add_definitions(-DUSE_CUDA)
 	enable_language(CUDA)
 	aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/cuda CUDA_SRCS)
+    set(CMAKE_CUDA_FLAGS "" CACHE STRING "")
+	if(CMAKE_CUDA_FLAGS)
+		list(REMOVE_ITEM CMAKE_CUDA_FLAGS "-cudart static")
+	endif()
+	string(APPEND CMAKE_CUDA_FLAGS "-cudart shared")
+
+
 	set(CUDA_STANDARD 14)
+	set(CMAKE_CUDA_FLAGS
+    "-gencode arch=compute_30,code=sm_30 -gencode arch=compute_30,code=compute_30 -gencode arch=compute_37,code=sm_37 -gencode arch=compute_53,code=sm_53 -gencode arch=compute_53,code=compute_53 -gencode arch=compute_70,code=sm_70 -gencode arch=compute_70,code=compute_70"
+    )
 else()
 	message(STATUS "Using CPU backend.")
     message(" The GPU backend is much faster than CPU backend.")
@@ -34,7 +44,6 @@ find_package(Threads REQUIRED)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED on)
-
 
 if (BLAS_BACKEND STREQUAL "EIGEN")
 	include_directories(${CMAKE_CURRENT_SOURCE_DIR}/third_party/Eigen)
@@ -89,7 +98,7 @@ aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/blas CPUBLAS_SRCS)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src DIR_SRCS)
 add_executable(TemplateGo ${DIR_SRCS} ${CPUBLAS_SRCS} ${CUDA_SRCS} ${LZ_SRCS})
 
-target_link_libraries(TemplateGo ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(TemplateGo Threads::Threads)
 target_link_libraries(TemplateGo ${BLAS_LIBRARIES})
 if(GPU_BACKEND STREQUAL "CUDA")
 	target_compile_definitions(TemplateGo PRIVATE USE_CUDA_BACKEND)

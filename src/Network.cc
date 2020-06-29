@@ -211,7 +211,7 @@ Network::get_output(const GameState *const state, const Ensemble ensemble,
 
 
   if (write_cache) {
-    //m_nncache.insert(state->board.get_hash(), result);
+    m_nncache.insert(state->board.get_hash(), result);
   }
   return result;
 }

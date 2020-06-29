@@ -11,7 +11,7 @@
 
 #include <vector>
 #include <array>
-
+#include <mutex>
 
 namespace LZ {
 class CUDAbackend : public NNpipe {
@@ -59,9 +59,8 @@ private:
   CudaFullyConnect value_fc2;
 
   bool is_applied;
-
+  std::mutex m_mtx;
 };
-
 }
 
 #endif
