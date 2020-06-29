@@ -239,5 +239,7 @@ public:
   static void dump_stats(UCTNode *node, GameState & state);
 
   static std::string pv_to_srting(UCTNode *node, GameState & state);
+
+  static void collect_nodes();
 };
 #endif

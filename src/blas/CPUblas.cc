@@ -143,8 +143,8 @@ void blas::dense(const int inputs, const int outputs,
                  const std::vector<float> &weights,
                  std::vector<float> &output) {
 #ifndef USE_BLAS
-  Gemm<false, true>::blas_gemm(1, outputs, inputs, 1, input.data(), inputs,
-                               weights.data(), inputs, 1, output.data(),
+  Gemm<false, true>::blas_gemm(1, outputs, inputs, 1.0f, input.data(), inputs,
+                               weights.data(), inputs, 0.0f, output.data(),
                                outputs);
 #else
 #ifdef USE_OPENBLAS

@@ -64,9 +64,14 @@ public:
   GameState & m_rootstate;
   UCTNode * m_rootnode;
 
+  void prepare_uct_search();
+  bool is_over_playouts() const;
+  void set_running(bool);
+
 private:
   Evaluation & m_evaluation;
   int m_maxplayouts;
+  std::atomic<bool> m_running;
   std::atomic<int> m_playouts;
 };
 

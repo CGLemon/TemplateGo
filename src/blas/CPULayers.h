@@ -1,15 +1,12 @@
 #ifndef CPULAYERS_H_INCLUDE
 #define CPULAYERS_H_INCLUDE
-
 #include "NetPipe.h"
+#include "Winograd_helper.h"
 
 #include "blas/CPUblas.h"
 #include "config.h"
 #include <cassert>
 #include <vector>
-
-std::vector<float> winograd_transform_f(const std::vector<float> &f,
-                                        const int outputs, const int channels);
 
 /*
 / =====================================================================

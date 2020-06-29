@@ -702,7 +702,6 @@ void UCT_Information::dump_stats(UCTNode *node, GameState & state) {
 }
 
 
-
 std::string UCT_Information::pv_to_srting(UCTNode *node, GameState & state) {
   auto pvlist = std::vector<int>{};
   auto *next = node;
@@ -719,6 +718,11 @@ std::string UCT_Information::pv_to_srting(UCTNode *node, GameState & state) {
     res += " ";
   }
   return res;
+}
+
+void UCT_Information::collect_nodes() {
+  
+
 }
 
 

@@ -140,14 +140,17 @@ bool check_release(size_t tot_sz, size_t sz, std::string name) {
 }
 
 int Search::uct_search() {
-  int select_move;
+  int select_move = Board::NO_VERTEX;
+  bool success = true;
+  bool keep_running = true;
   {
     auto root_data = std::make_shared<DataBuffer>();
     auto root_node = std::make_shared<UCTNode>(root_data);
 
     m_rootnode = root_node.get();
+
     updata_root(root_node);
-    m_playouts = 0;
+    prepare_uct_search();
   
     SearchPool.wakeup();
 
@@ -157,28 +160,42 @@ int Search::uct_search() {
       if (result.valid()) {
         increment_playouts();
       }
+
+      keep_running &= is_over_playouts();
+      set_running(keep_running);
     } while (is_uct_running());
 
     SearchPool.wait_finish();
-
+    
     select_move = root_node->get_best_move();
     UCT_Information::dump_stats(m_rootnode, m_rootstate);
   }
   
-  bool success = check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
+  success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
   success &= check_release(UCTNode::node_tree_size, sizeof(UCTNode), "Node");
   success &= check_release(DataBuffer::node_data_size, sizeof(DataBuffer), "Data");
 
   assert(success);
+  assert(select_move != Board::NO_VERTEX);
 
   return select_move;
 }
 
+void Search::prepare_uct_search() {
+  m_running = true;
+  m_playouts = 0;
+}
 
+bool Search::is_over_playouts() const {
+  return m_playouts.load() < m_maxplayouts;;
+}
+
+void Search::set_running(bool is_running) {
+  m_running = is_running;
+}
 
 bool Search::is_uct_running() {
-  bool keep_running = m_playouts.load() < m_maxplayouts;
-  return keep_running;
+  return m_running.load();
 }
 
 void Search::benchmark(int playouts) {

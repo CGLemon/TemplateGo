@@ -5,15 +5,18 @@
 #include <cuda_runtime.h>
 //#include <cuda_fp16.h>
 #include <cublas_v2.h>
-//#include <cudnn.h>
+
+#ifdef USE_CUDNN
+#include <cudnn.h>
+#endif
 
 #define KBLOCKSIZE 256
 
-// void CudnnError(cudnnStatus_t status);
+void CudnnError(cudnnStatus_t status);
 void CublasError(cublasStatus_t status);
 void CudaError(cudaError_t status);
 
-//#define ReportCUDNNErrors(status) CudnnError(status)
+#define ReportCUDNNErrors(status) CudnnError(status)
 #define ReportCUBLASErrors(status) CublasError(status)
 #define ReportCUDAErrors(status) CudaError(status)
 

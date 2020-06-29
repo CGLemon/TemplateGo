@@ -3,9 +3,9 @@
 
 #include <memory>
 #include <vector>
-
 #include "config.h"
 
+/*
 static constexpr int WINOGRAD_M = 4;
 static constexpr int WINOGRAD_ALPHA = WINOGRAD_M + 3 - 1;
 static constexpr int WINOGRAD_WTILES =
@@ -13,17 +13,8 @@ static constexpr int WINOGRAD_WTILES =
 static constexpr int WINOGRAD_TILE = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
 static constexpr int WINOGRAD_P = WINOGRAD_WTILES * WINOGRAD_WTILES;
 static constexpr float SQ2 = 1.4142135623730951f; // Square root of 2
-
-static constexpr int OUTPUTS_POLICY = 2;
-static constexpr int OUTPUTS_VALUE = 1;
-static constexpr int INPUT_MOVES = 8;
-static constexpr int INPUT_CHANNELS = 2 * INPUT_MOVES + 2;
-static constexpr int VALUE_LAYER = 256;
-
-static constexpr int VALUE_LABELS = 1;
-static constexpr int POTENTIAL_MOVES = NUM_INTERSECTIONS + 1;
-
 static constexpr int CONV2D_SIZE = BOARD_SIZE;
+*/
 
 struct ForwardPipeWeights {
   // Input + residual block tower

@@ -11,11 +11,6 @@ void CublasError(cublasStatus_t status) {
     std::cerr << "CUBLAS error: "
               << "\n"; //<< s << "\n";
     exit(-1);
-    // char message[128];
-    // sprintf(message, "CUBLAS error: %s (%s:%d) ",
-    // CublasGetErrorString(status),
-    //        file, line);
-    // throw Exception(message);
   }
 }
 
@@ -24,29 +19,18 @@ void CudaError(cudaError_t status) {
     const char *s = cudaGetErrorString(status);
     std::cerr << "CUDA Error: " << s << "\n";
     exit(-1);
-    // char message[128];
-    // sprintf(message, "CUDA error: %s (%s:%d) ", cudaGetErrorString(status),
-    //        file, line);
-    // throw Exception(message);
   }
 }
 
-/*
-void ReportCUDAErrors(cudaError_t status) {
-  // cudaDeviceSynchronize();
-  cudaError_t status2 = cudaGetLastError();
-  if (status != cudaSuccess) {
-    const char *s = cudaGetErrorString(status);
+#ifdef USE_CUDNN
+void CudnnError(cudnnStatus_t status) {
+  if (status != CUDNN_STATUS_SUCCESS) {
+    const char *s = cudnnGetErrorString(status);
     std::cerr << "CUDA Error: " << s << "\n";
     exit(-1);
   }
-  if (status2 != cudaSuccess) {
-    const char *s = cudaGetErrorString(status);
-    std::cerr << "CUDA Error Prev: " << s << "\n";
-    exit(-1);
-  }
 }
-*/
+#endif
 
 int cuda_get_device() {
   int n = 0;

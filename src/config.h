@@ -3,7 +3,7 @@
 
 #include <string>
 
-#define MARCRO_BOARDSIZE 19
+#define MARCRO_BOARDSIZE 9
 
 #define MARCRO_MIN_BOARDSIZE 7
 #define MARCRO_MAX_BOARDSIZE 25

@@ -1,6 +1,32 @@
-#include "cuda/CUDACommon.h"
 #include "cuda/CUDAKernels.h"
 #ifdef USE_CUDA
+template <typename T>
+__global__ void cuda_addVectors_kernel(T *a, T *b, T *c, int asize, int bsize,
+                                       int csize, bool relu) {
+  int i = threadIdx.x + blockDim.x * blockIdx.x;
+  if (i < size) {
+    float aVal = 0;
+    float bVal = 0;
+    if (a) aVal = (float)(a[i % asize]);
+    if (b) bVal = (float)(b[i % bsize]);
+
+    float cVal = aVal + bVal;
+
+    if (relu && (cVal < 0)) cVal = 0;
+    c[i] = (T)cVal;
+  }
+}
+
+template <typename T>
+void cuda_addVectors(T *a, T *b, T *c, int asize, int bsize,
+                     int csize, bool relu) {
+  const int kBlockSize = KBLOCKSIZE;
+  const int blocks = DivUp(size, kBlockSize);
+
+  cuda_addVectors_kernel<<<blocks, kBlockSize>>>(a, b, c, asize, bsize, size, relu);
+  ReportCUDAErrors(cudaGetLastError());
+}
+
 template <typename T>
 __global__ void batchNorm_kernel(T *data, const float *means,
                                  const float *stddevs, int batch, int C,
@@ -21,7 +47,6 @@ __global__ void batchNorm_kernel(T *data, const float *means,
     if (eltwise)
       el += (float)eltwise[index];
 
-    // relu
     if ((el < 0))
       el = 0;
 
@@ -105,8 +130,8 @@ void cuda_im2col(int filter_size, int batch, int channels, int H, int W,
 
 void cuda_gemm(bool TA, bool TB, int M, int N, int K, float ALPHA,
                const float *A_gpu, int lda, const float *B_gpu, int ldb,
-               float BETA, float *C_gpu, int ldc) {
-  cublasHandle_t handle = blas_handle();
+               float BETA, float *C_gpu, int ldc, cublasHandle_t handle) {
+  //cublasHandle_t cublas = blas_handle();
   ReportCUBLASErrors(cublasSgemm(handle, (TB ? CUBLAS_OP_T : CUBLAS_OP_N),
                                  (TA ? CUBLAS_OP_T : CUBLAS_OP_N), N, M, K,
                                  &ALPHA, B_gpu, ldb, A_gpu, lda, &BETA, C_gpu,
@@ -128,8 +153,26 @@ template <typename T>
 void cuda_swap(T *a, T *b, int size) {
   const int kBlockSize = KBLOCKSIZE;
   const int blocks = DivUp(size, kBlockSize);
-  swap_kernel<<<blocks, kBlockSize>>>(a, b ,size);
+  swap_kernel<<<blocks, kBlockSize>>>(a, b, size);
 }
+
+
+template <typename T>
+__global__ void copy_kernel(T *a, T *b, int size) {
+  int index = threadIdx.x + blockDim.x * blockIdx.x;
+  if (index < size) {
+    a[index] = b[index];
+  }
+} 
+
+
+template<typename T>
+void cuda_copy(T *a, T *b, int size) {
+  const int kBlockSize = KBLOCKSIZE;
+  const int blocks = DivUp(size, kBlockSize);
+  copy_kernel<<<blocks, kBlockSize>>>(a, b, size);
+}
+
 
 
 template void cuda_batchnorm<float>(float *data, const float *means,
@@ -141,4 +184,7 @@ template void cuda_im2col<float>(int filter_size, int N, int C, int H, int W,
 
 template void cuda_swap<float>(float *a, float *b, int size);
 
+template void cuda_copy<float>(float *a, float *b, int size);
+
+template void cuda_addVectors<float>(float *c, float *a, float *b, int size, int asize, int bsize, bool relu);
 #endif

@@ -1,12 +1,11 @@
 #include "cuda/CUDALayers.h"
-#include "cuda/CUDACommon.h"
 #include "cuda/CUDAKernels.h"
 #include <cassert>
 #ifdef USE_CUDA
 CudaBatchnorm::CudaBatchnorm(int MAX_batch, int output_channels) {
 
-  channels = output_channels;
-  batch = MAX_batch;
+  m_channels = output_channels;
+  m_batch = MAX_batch;
   is_loaded = false;
 }
 
@@ -17,21 +16,24 @@ CudaBatchnorm::~CudaBatchnorm() {
   }
 }
 
-void CudaBatchnorm::Forward(const int b, float *data,
+void CudaBatchnorm::Forward(const int batch, float *data,
                             const float *const eltwise) {
-  assert(b <= batch);
-  cuda_batchnorm(data, cuda_means, cuda_stddevs, b, channels, spatial_size,
+
+  if (!is_loaded) return;
+  assert(batch <= m_batch);
+  cuda_batchnorm(data, cuda_means, cuda_stddevs, batch, m_channels, spatial_size,
                  eltwise);
 }
 
 
-void CudaBatchnorm::cpu_Forward(const int b, std::vector<float> &data, float* eltwise) {
+void CudaBatchnorm::cpu_Forward(const int batch, std::vector<float> &data,
+                                float* eltwise) {
 
-  size_t d_s = data.size() * sizeof(float);
+  assert(batch <= m_batch);
+
+  size_t d_s = data.size() * sizeof(float) * batch;
   float *cuda_data;
   float *cuda_eltwise;
-
-  assert(b <= batch);
 
   ReportCUDAErrors(cudaMalloc(&cuda_data, d_s));
   ReportCUDAErrors(cudaMalloc(&cuda_eltwise, d_s));
@@ -46,7 +48,7 @@ void CudaBatchnorm::cpu_Forward(const int b, std::vector<float> &data, float* el
     cuda_eltwise = nullptr;
   }
 
-  Forward(b, cuda_data, cuda_eltwise);
+  Forward(batch, cuda_data, cuda_eltwise);
 
   ReportCUDAErrors(
       cudaMemcpy(data.data(), cuda_data, d_s, cudaMemcpyDeviceToHost));
@@ -60,7 +62,7 @@ void CudaBatchnorm::cpu_Forward(const int b, std::vector<float> &data, float* el
 void CudaBatchnorm::LoadingWeight(const std::vector<float> &means,
                                   const std::vector<float> &stddevs) {
 
-  const size_t weights_size = sizeof(float) * channels;
+  const size_t weights_size = sizeof(float) * m_channels;
   assert(weights_size == sizeof(float) * means.size() &&
          weights_size == sizeof(float) * stddevs.size());
   ReportCUDAErrors(cudaMalloc(&cuda_means, weights_size));
@@ -76,11 +78,13 @@ void CudaBatchnorm::LoadingWeight(const std::vector<float> &means,
 CudaConvolve::CudaConvolve(const size_t MAX_batch, const size_t filter_size,
                            const size_t input_channels, const size_t output_channels) {
 
-  in_channels = input_channels;
-  out_channels = output_channels;
-  filter = filter_size;
-  filter_dim = filter * filter * in_channels;
-  batch = MAX_batch;
+  m_in_channels = input_channels;
+  m_out_channels = output_channels;
+  m_filter = filter_size;
+  m_filter_dim = m_filter * m_filter * m_in_channels;
+  m_batch = MAX_batch;
+
+  m_cublas = blas_handle();
   is_loaded = false;
 }
 
@@ -90,24 +94,35 @@ CudaConvolve::~CudaConvolve() {
   }
 }
 
-void CudaConvolve::Forward(const int b, float *input, float *output) {
+void CudaConvolve::Forward(const int batch, float *input, float *output) {
   // BUG: 在 filter = 1 時，cuda_im2col 無法得到正確的答案
   // TODO: 支持多 batch 
+  if (!is_loaded) return;
+  assert(batch == 1);
 
-  assert(b == 1);
-  if (filter != 1) {
-    cuda_im2col(filter, b, in_channels, height, width, input, cuda_col);
-    cuda_gemm(false, false, out_channels, spatial_size, filter_dim, 1.0f,
-                 cuda_weights, filter_dim, cuda_col, spatial_size,
-                 0.0f, output, spatial_size);
+
+#ifdef USE_CUDNN
+
+
+
+#endif
+
+
+
+  if (m_filter != 1) {
+    cuda_im2col(m_filter, batch, m_in_channels, height, width, input, cuda_col);
+    cuda_gemm(false, false, m_out_channels, spatial_size, m_filter_dim, 1.0f,
+              cuda_weights, m_filter_dim, cuda_col, spatial_size,
+              0.0f, output, spatial_size, m_cublas);
   } else {
-    cuda_gemm(false, false, out_channels, spatial_size, filter_dim, 1.0f,
-                 cuda_weights, filter_dim, input, spatial_size,
-                 0.0f, output, spatial_size);
+    cuda_gemm(false, false, m_out_channels, spatial_size, m_filter_dim, 1.0f,
+              cuda_weights, m_filter_dim, input, spatial_size,
+              0.0f, output, spatial_size, m_cublas);
   }
 }
 
-void CudaConvolve::cpu_Forward(const int b, const std::vector<float> &input, std::vector<float> &output) {
+void CudaConvolve::cpu_Forward(const int batch, const std::vector<float> &input,
+                               std::vector<float> &output) {
 
   size_t input_s = input.size() * sizeof(float);
   size_t output_s = output.size() * sizeof(float);
@@ -120,7 +135,7 @@ void CudaConvolve::cpu_Forward(const int b, const std::vector<float> &input, std
   ReportCUDAErrors(
       cudaMemcpy(cuda_input, input.data(), input_s, cudaMemcpyHostToDevice));
 
-  Forward(b, cuda_input, cuda_output);
+  Forward(batch, cuda_input, cuda_output);
 
   ReportCUDAErrors(
       cudaMemcpy(output.data(), cuda_output, output_s, cudaMemcpyDeviceToHost));
@@ -133,23 +148,89 @@ void CudaConvolve::cpu_Forward(const int b, const std::vector<float> &input, std
 void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
 
   const size_t weights_size = sizeof(float) * weights.size();
-  assert(weights.size() % (filter * filter * out_channels * in_channels) == 0);
+  assert(weights.size() 
+             == (m_filter_dim * m_out_channels));
 
-  w_s = weights_size;
+  ReportCUDAErrors(cudaMalloc(&cuda_weights, weights_size));
+  ReportCUDAErrors(cudaMalloc(&cuda_col, weights_size * m_filter * m_filter));
 
-  ReportCUDAErrors(cudaMalloc(&cuda_weights, w_s));
-  ReportCUDAErrors(cudaMalloc(&cuda_col, w_s * filter * filter));
-
-  ReportCUDAErrors(cudaMemcpy(cuda_weights, weights.data(), w_s,
+  ReportCUDAErrors(cudaMemcpy(cuda_weights, weights.data(), weights_size,
                               cudaMemcpyHostToDevice));
   is_loaded = true;
 }
 
-CudaFullyConnect::CudaFullyConnect(const size_t batch, const size_t inputs, const size_t outputs) {
+CudaFullyConnect::CudaFullyConnect(const size_t batch, const size_t inputs, 
+                                   const size_t outputs, bool is_relu) {
   m_batch = batch;
   m_inputs = inputs;
   m_outputs = outputs;
   is_loaded = false;
+  m_is_relu = is_relu;
+  m_cublas = blas_handle();
 }
+
+void CudaFullyConnect::LoadingWeight(const std::vector<float> &weights,
+                                     const std::vector<float> &biases) {
+
+  
+  const size_t weights_size = sizeof(float) * weights.size();
+  const size_t biases_size = sizeof(float) * biases.size();
+
+  assert(weights.size() == m_inputs * m_outputs);
+  assert(biases.size() == m_outputs);
+
+  ReportCUDAErrors(cudaMalloc(&cuda_weights, weights_size));
+  ReportCUDAErrors(cudaMalloc(&cuda_biases, biases_size));
+  
+  ReportCUDAErrors(cudaMemcpy(cuda_weights, weights.data(), weights_size,
+                              cudaMemcpyHostToDevice));
+  ReportCUDAErrors(cudaMemcpy(cuda_biases, biases.data(), biases_size,
+                              cudaMemcpyHostToDevice));
+  is_loaded = true;
+}
+
+
+void CudaFullyConnect::Forward(const int batch, float *input, float *output) {
+
+  if (!is_loaded) return;
+  assert(batch <= m_batch);
+  cuda_gemm(false, true, batch, m_outputs, m_inputs, 1.0f, input, m_inputs, 
+            cuda_weights, m_inputs, 0.0f, output, m_outputs, m_cublas);
+
+  cuda_addVectors(output, cuda_biases, output, m_outputs * batch,
+                  m_outputs,  m_outputs * batch, m_is_relu);
+}
+  
+
+void CudaFullyConnect::cpu_Forward(const int batch, const std::vector<float> &input, 
+                                   std::vector<float> &output) {
+
+  const size_t input_s = input.size() * sizeof(float);
+  const size_t output_s = output.size() * sizeof(float);
+  float *cuda_input;
+  float *cuda_output;
+  ReportCUDAErrors(cudaMalloc(&cuda_input, input_s));
+  ReportCUDAErrors(cudaMalloc(&cuda_output, output_s));
+
+  ReportCUDAErrors(
+      cudaMemcpy(cuda_input, input.data(), input_s, cudaMemcpyHostToDevice));
+
+  Forward(batch, cuda_input, cuda_output);
+
+  ReportCUDAErrors(
+      cudaMemcpy(output.data(), cuda_output, output_s, cudaMemcpyDeviceToHost));
+
+  ReportCUDAErrors(cudaFree(cuda_input));
+  ReportCUDAErrors(cudaFree(cuda_output));
+}
+
+
+CudaFullyConnect::~CudaFullyConnect() {
+  if (is_loaded) {
+    ReportCUDAErrors(cudaFree(cuda_weights));
+    ReportCUDAErrors(cudaFree(cuda_biases));
+  }
+}
+
 
 #endif

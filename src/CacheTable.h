@@ -9,6 +9,7 @@
 
 #include "NetPipe.h"
 #include "config.h"
+#include "LZ/LZNetParameters.h"
 
 struct TAResult {
   TAResult() : blackscore(0), whitescore(0) {}
@@ -23,7 +24,7 @@ struct NNResult {
   }
 
   std::array<float, NUM_INTERSECTIONS> policy;
-  std::array<float, VALUE_LABELS> winrate;
+  std::array<float, LZ::VALUE_LABELS> winrate;
   float policy_pass;
 };
 
