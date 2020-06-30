@@ -10,12 +10,12 @@ void cuda_batchnorm(T *data, const float *means, const float *stddevs,
                     const T *eltwise);
 
 template <typename T>
-void cuda_im2col(int filter_size, int batch, int channels, int H, int W,
+void cuda_im2col(int filter_size, int channels, int H, int W,
                  T *data_im, T *data_col);
 
 void cuda_gemm(bool TA, bool TB, int M, int N, int K, float ALPHA,
                const float *A_gpu, int lda, const float *B_gpu, int ldb,
-               float BETA, float *C_gpu, int ldc, cublasHandle_t handle);
+               float BETA, float *C_gpu, int ldc, cublasHandle_t * handle);
 
 template <typename T>
 void cuda_addVectors(T *c, T *a, T *b, int size, int asize, int bsize, bool relu);

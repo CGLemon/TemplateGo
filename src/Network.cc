@@ -40,6 +40,7 @@
 #include "Utils.h"
 #include "blas/CPULayers.h"
 #include "cfg.h"
+#include "config.h"
 
 #ifdef USE_CUDA
 #include "LZ/LZCUDAbackend.h"
@@ -60,14 +61,10 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
-#include <cmath>
-#include <fstream>
-#include <iostream>
-#include <iterator>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <vector>
+
 using namespace Utils;
 
 void Network::initialize(int playouts, const std::string &weightsfile,
@@ -91,8 +88,9 @@ void Network::initialize(int playouts, const std::string &weightsfile,
   auto_printf("BLAS Core: built-in Eigen %d.%d.%d library.\n",
               EIGEN_WORLD_VERSION, EIGEN_MAJOR_VERSION, EIGEN_MINOR_VERSION);
 #endif
-
-  m_nncache.resize(cfg_cache_moves * playouts);
+  const size_t cache_size = cfg_cache_ratio * NUM_INTERSECTIONS * 
+                            cfg_cache_moves * playouts;
+  m_nncache.resize(cache_size);
 
 #ifdef USE_CUDA
   using backend = LZ::CUDAbackend;

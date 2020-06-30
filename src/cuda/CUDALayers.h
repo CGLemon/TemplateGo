@@ -12,7 +12,7 @@ public:
   CudaBatchnorm(int batch, int channels);
   ~CudaBatchnorm();
   // Forward: 須額外申請 device 端記憶體
-  void Forward(const int batch, float *data,
+  void Forward(const size_t batch, float *data,
                const float *const eltwise = nullptr);
 
   // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
@@ -39,11 +39,12 @@ public:
                const size_t in_channels, const size_t out_channels);
   ~CudaConvolve();
   // Forward: 須額外申請 device 端記憶體
-  void Forward(const int batch, float *input, float *output);
+  void Forward(const int batch, float *input, float *output,
+               void * cuda_scratch, size_t scratch_size, CudaHandel * handel);
   
   // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
   void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
-  void LoadingWeight(const std::vector<float> &weights);
+  void LoadingWeight(const std::vector<float> &weights, size_t & scratch_size);
 
 private:
   static constexpr int width = CONV2D_SIZE;
@@ -54,12 +55,8 @@ private:
   int m_filter;
   int m_in_channels;
   int m_out_channels;
-  cublasHandle_t m_cublas;
 
 #ifdef USE_CUDNN
-  void * cuda_scratch;
-  size_t scratch_size;
-  cudnnHandle_t m_cudnn;
   cudnnFilterDescriptor_t filter_desc;
   cudnnConvolutionDescriptor_t conv_desc;
   cudnnTensorDescriptor_t in_tensor_desc;
@@ -81,9 +78,11 @@ public:
                    const size_t outputs, bool is_relu);
   ~CudaFullyConnect();
   // Forward: 須額外申請 device 端記憶體
-  void Forward(const int batch, float *input, float *output);
+  void Forward(const int batch, float *input,
+               float *output, CudaHandel * handel);
   
-  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
+  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體 
+  // 不支持 cuDNN
   void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
 
   void LoadingWeight(const std::vector<float> &weights,
@@ -93,7 +92,6 @@ private:
   int m_batch;
   int m_inputs;
   int m_outputs;
-  cublasHandle_t m_cublas;
 
   bool is_loaded{false};
   float* cuda_weights;

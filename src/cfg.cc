@@ -16,6 +16,7 @@ bool cfg_gtp_mode;
 
 float cfg_softmax_temp;
 int cfg_cache_moves;
+float cfg_cache_ratio;
 
 std::string cfg_weightsfile;
 int cfg_uct_threads;
@@ -35,7 +36,7 @@ int cfg_boardsize;
 float cfg_komi;
 int cfg_playouts;
 float cfg_allow_pass_ratio;
-
+int cfg_batchsize;
 
 void arg_parser(int argc, char **argv) {
 
@@ -77,6 +78,7 @@ void init_cfg() {
   cfg_gtp_mode = false;
   cfg_softmax_temp = 1.0f;
   cfg_cache_moves = 5;
+  cfg_cache_ratio = 0.2f;
 
   cfg_weightsfile = "NO_WEIGHT_FILE";
   cfg_uct_threads = 0;
@@ -96,6 +98,7 @@ void init_cfg() {
   cfg_komi = DEFULT_KOMI;
   cfg_playouts = 1600;
   cfg_allow_pass_ratio = 0.2f;
+  cfg_batchsize = 1;
 }
 
 //TODO: 用外部文件來設定 cfg

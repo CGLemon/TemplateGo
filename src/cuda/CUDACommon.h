@@ -1,6 +1,8 @@
 #ifndef CUDACOMMON_H_INCLUDE
 #define CUDACOMMON_H_INCLUDE
 #ifdef USE_CUDA
+
+#include "Utils.h"
 #include <cstdio>
 #include <cuda_runtime.h>
 //#include <cuda_fp16.h>
@@ -26,11 +28,23 @@ void CudaError(cudaError_t status);
 
 cublasHandle_t blas_handle();
 
-
-
 int cuda_get_device();
 
 inline static int DivUp(int a, int b) { return (a + b - 1) / b; }
+
+struct CudaHandel {
+#ifdef USE_CUDNN
+  cudnnHandle_t cudnn_handel;
+#endif
+  cublasHandle_t cublas_handel;
+
+  void apply();
+
+};
+
+
+void cuda_gpu_info();
+
 
 #endif
 #endif

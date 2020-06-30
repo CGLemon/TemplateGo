@@ -12,6 +12,9 @@
 #include <vector>
 #include <array>
 #include <mutex>
+#include <queue>
+#include <memory>
+#include <condition_variable>
 
 namespace LZ {
 class CUDAbackend : public NNpipe {
@@ -27,16 +30,34 @@ public:
                        std::vector<float> &output_val);
 
 private:
+  struct ForwawrdEntry {
+	std::vector<float> input;
+    std::vector<float> output_pol;
+    std::vector<float> output_val;
+    std::condition_variable m_condvar;
+    std::mutex m_mutex;
+  };
+
+  std::queue<std::shared_ptr<ForwawrdEntry>> m_forwawrd_queue;
+
+  void batch_forward(const size_t batch,
+                     const std::vector<float> &input,
+                     std::vector<float> &output_pol,
+                     std::vector<float> &output_val);
+
+
   void pushing_weights(std::shared_ptr<NNWeights> weights);
 
 
   std::shared_ptr<NNWeights> m_weights;
 
-  
+  CudaHandel handel;
   int m_residual_channels;
   int m_residual_blocks;
 
-  
+  void * cuda_scratch;
+  size_t m_scratch_size;
+
   float *cuda_input;
   float *cuda_output_pol;
   float *cuda_output_val;

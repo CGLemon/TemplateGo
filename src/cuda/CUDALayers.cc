@@ -16,7 +16,7 @@ CudaBatchnorm::~CudaBatchnorm() {
   }
 }
 
-void CudaBatchnorm::Forward(const int batch, float *data,
+void CudaBatchnorm::Forward(const size_t batch, float *data,
                             const float *const eltwise) {
 
   if (!is_loaded) return;
@@ -31,7 +31,7 @@ void CudaBatchnorm::cpu_Forward(const int batch, std::vector<float> &data,
 
   assert(batch <= m_batch);
 
-  size_t d_s = data.size() * sizeof(float) * batch;
+  size_t d_s = batch * data.size() * sizeof(float);
   float *cuda_data;
   float *cuda_eltwise;
 
@@ -85,7 +85,6 @@ CudaConvolve::CudaConvolve(const size_t MAX_batch, const size_t filter_size,
   m_filter_dim = m_filter * m_filter * m_in_channels;
   m_batch = MAX_batch;
 
-  m_cublas = blas_handle();
 #ifdef USE_CUDNN
   cudnn_applied = false;
 #endif
@@ -103,18 +102,16 @@ CudaConvolve::~CudaConvolve() {
     cudnnDestroyConvolutionDescriptor(conv_desc);
     cudnnDestroyTensorDescriptor(in_tensor_desc);
     cudnnDestroyTensorDescriptor(out_tensor_desc);
-    ReportCUDAErrors(cudaFree(cuda_scratch));
   }
 #endif
 }
 
-void CudaConvolve::Forward(const int batch, float *input, float *output) {
-  // BUG: 在 filter = 1 時，cuda_im2col 無法得到正確的答案
-  // TODO: 支持多 batch 
+void CudaConvolve::Forward(const int batch, float *input, float *output,
+                           void * cuda_scratch, size_t scratch_size, CudaHandel * handel) {
   if (!is_loaded) return;
-  assert(batch == 1);
-
+  assert(batch <= m_batch);
 #ifdef USE_CUDNN
+  if (!cuda_scratch) return;
   ReportCUDNNErrors(cudnnSetTensor4dDescriptor(in_tensor_desc,
                                                CUDNN_TENSOR_NCHW,
                                                CUDNN_DATA_FLOAT,
@@ -125,19 +122,25 @@ void CudaConvolve::Forward(const int batch, float *input, float *output) {
                                                batch, m_out_channels, height, width));
   float alpha = 1.0f, beta = 0.0f;
   ReportCUDNNErrors(cudnnConvolutionForward(
-                    m_cudnn, &alpha, in_tensor_desc, input, filter_desc, cuda_weights,
+                    handel->cudnn_handel, &alpha, in_tensor_desc, input, filter_desc, cuda_weights,
                     conv_desc, conv_algo, cuda_scratch, scratch_size, &beta, out_tensor_desc,
                     output));
 #else
-  if (m_filter != 1) {
-    cuda_im2col(m_filter, batch, m_in_channels, height, width, input, cuda_col);
-    cuda_gemm(false, false, m_out_channels, spatial_size, m_filter_dim, 1.0f,
-              cuda_weights, m_filter_dim, cuda_col, spatial_size,
-              0.0f, output, spatial_size, m_cublas);
-  } else {
-    cuda_gemm(false, false, m_out_channels, spatial_size, m_filter_dim, 1.0f,
-              cuda_weights, m_filter_dim, input, spatial_size,
-              0.0f, output, spatial_size, m_cublas);
+  const size_t input_shift = m_in_channels * spatial_size;
+  const size_t output_shift = m_out_channels * spatial_size;
+  for (auto b = size_t{0}; b < batch; ++b) {
+    float * input_ptr = input + b * input_shift;
+    float * output_ptr = output + b * output_shift;
+    if (m_filter != 1) {
+      cuda_im2col(m_filter, m_in_channels, height, width, input_ptr, cuda_col);
+      cuda_gemm(false, false, m_out_channels, spatial_size, m_filter_dim, 1.0f,
+                cuda_weights, m_filter_dim, cuda_col, spatial_size,
+                0.0f, output_ptr, spatial_size, &handel->cublas_handel);
+    } else {
+      cuda_gemm(false, false, m_out_channels, spatial_size, m_filter_dim, 1.0f,
+                cuda_weights, m_filter_dim, input_ptr, spatial_size,
+                0.0f, output_ptr, spatial_size, &handel->cublas_handel);
+    }
   }
 #endif
 
@@ -146,8 +149,8 @@ void CudaConvolve::Forward(const int batch, float *input, float *output) {
 void CudaConvolve::cpu_Forward(const int batch, const std::vector<float> &input,
                                std::vector<float> &output) {
   
-  size_t input_s = input.size() * sizeof(float);
-  size_t output_s = output.size() * sizeof(float);
+  size_t input_s = batch * input.size() * sizeof(float);
+  size_t output_s = batch * output.size() * sizeof(float);
   float *cuda_input;
   float *cuda_output;
 
@@ -156,8 +159,13 @@ void CudaConvolve::cpu_Forward(const int batch, const std::vector<float> &input,
 
   ReportCUDAErrors(
       cudaMemcpy(cuda_input, input.data(), input_s, cudaMemcpyHostToDevice));
+  
+  CudaHandel handel;
+  handel.apply();
+  void * cuda_scratch = nullptr;
+  size_t scratch_size = 0;
 
-  Forward(batch, cuda_input, cuda_output);
+  Forward(batch, cuda_input, cuda_output, cuda_scratch, scratch_size, &handel);
 
   ReportCUDAErrors(
       cudaMemcpy(output.data(), cuda_output, output_s, cudaMemcpyDeviceToHost));
@@ -167,7 +175,7 @@ void CudaConvolve::cpu_Forward(const int batch, const std::vector<float> &input,
 }
 
 
-void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
+void CudaConvolve::LoadingWeight(const std::vector<float> &weights, size_t & scratch_size) {
 
   if (is_loaded) return;
   const size_t weights_size = sizeof(float) * weights.size();
@@ -183,22 +191,19 @@ void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
 #ifdef USE_CUDNN
   if (cudnn_applied) return;
 
-  scratch_size = 0;
-  cuda_scratch = nullptr;
+  size_t apply_scratch_size = 0;
+  
 
-  m_cudnn = cudnn_handle();
+  auto cudnn = cudnn_handle();
   cudnnCreateFilterDescriptor(&filter_desc);
   cudnnCreateConvolutionDescriptor(&conv_desc);
   cudnnCreateTensorDescriptor(&out_tensor_desc);
   cudnnCreateTensorDescriptor(&in_tensor_desc);
-  
-  //conv_algo = CUDNN_CONVOLUTION_FWD_ALGO_WINOGRAD_NONFUSED;
-  //conv_algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM;
 
   ReportCUDNNErrors(cudnnSetFilter4dDescriptor(filter_desc, CUDNN_DATA_FLOAT, CUDNN_TENSOR_NCHW,
                                                m_out_channels, m_in_channels, m_filter, m_filter));
   
-  const int padding = m_filter / 2;
+  const size_t padding = m_filter / 2;
   ReportCUDNNErrors(cudnnSetConvolution2dDescriptor(
                     conv_desc, padding, padding, 1, 1, 1, 1,
                     CUDNN_CROSS_CORRELATION, CUDNN_DATA_FLOAT));
@@ -212,7 +217,7 @@ void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
                                                CUDNN_DATA_FLOAT,
                                                m_batch, m_out_channels, height, width));
 
-  ReportCUDNNErrors(cudnnGetConvolutionForwardAlgorithm(m_cudnn,
+  ReportCUDNNErrors(cudnnGetConvolutionForwardAlgorithm(cudnn,
                                                         in_tensor_desc,
                                                         filter_desc, 
                                                         conv_desc,
@@ -221,26 +226,26 @@ void CudaConvolve::LoadingWeight(const std::vector<float> &weights) {
                                                         0,
                                                         &conv_algo));
 
-  ReportCUDNNErrors(cudnnGetConvolutionForwardWorkspaceSize(m_cudnn,
+  ReportCUDNNErrors(cudnnGetConvolutionForwardWorkspaceSize(cudnn,
                                                             in_tensor_desc,
                                                             filter_desc, 
                                                             conv_desc,
                                                             out_tensor_desc, 
                                                             conv_algo, 
-                                                            &scratch_size));
-  ReportCUDAErrors(cudaMalloc(&cuda_scratch, scratch_size));
+                                                            &apply_scratch_size));
+  const size_t max_scratch_size = std::max(apply_scratch_size, scratch_size);
+  scratch_size = max_scratch_size;
   cudnn_applied = true;
 #endif
 }
 
-CudaFullyConnect::CudaFullyConnect(const size_t batch, const size_t inputs, 
+CudaFullyConnect::CudaFullyConnect(const size_t MAX_batch, const size_t inputs, 
                                    const size_t outputs, bool is_relu) {
-  m_batch = batch;
+  m_batch = MAX_batch;
   m_inputs = inputs;
   m_outputs = outputs;
   is_loaded = false;
   m_is_relu = is_relu;
-  m_cublas = blas_handle();
 }
 
 void CudaFullyConnect::LoadingWeight(const std::vector<float> &weights,
@@ -264,12 +269,12 @@ void CudaFullyConnect::LoadingWeight(const std::vector<float> &weights,
 }
 
 
-void CudaFullyConnect::Forward(const int batch, float *input, float *output) {
+void CudaFullyConnect::Forward(const int batch, float *input, float *output, CudaHandel * handel) {
 
   if (!is_loaded) return;
   assert(batch <= m_batch);
   cuda_gemm(false, true, batch, m_outputs, m_inputs, 1.0f, input, m_inputs, 
-            cuda_weights, m_inputs, 0.0f, output, m_outputs, m_cublas);
+            cuda_weights, m_inputs, 0.0f, output, m_outputs, &handel->cublas_handel);
 
   cuda_addVectors(output, cuda_biases, output, m_outputs * batch,
                   m_outputs,  m_outputs * batch, m_is_relu);
@@ -279,8 +284,8 @@ void CudaFullyConnect::Forward(const int batch, float *input, float *output) {
 void CudaFullyConnect::cpu_Forward(const int batch, const std::vector<float> &input, 
                                    std::vector<float> &output) {
 
-  const size_t input_s = input.size() * sizeof(float);
-  const size_t output_s = output.size() * sizeof(float);
+  const size_t input_s = batch * input.size() * sizeof(float);
+  const size_t output_s = batch * output.size() * sizeof(float);
   float *cuda_input;
   float *cuda_output;
   ReportCUDAErrors(cudaMalloc(&cuda_input, input_s));
@@ -289,7 +294,9 @@ void CudaFullyConnect::cpu_Forward(const int batch, const std::vector<float> &in
   ReportCUDAErrors(
       cudaMemcpy(cuda_input, input.data(), input_s, cudaMemcpyHostToDevice));
 
-  Forward(batch, cuda_input, cuda_output);
+  CudaHandel handel;
+  handel.apply();
+  Forward(batch, cuda_input, cuda_output, &handel);
 
   ReportCUDAErrors(
       cudaMemcpy(output.data(), cuda_output, output_s, cudaMemcpyDeviceToHost));
@@ -305,6 +312,5 @@ CudaFullyConnect::~CudaFullyConnect() {
     ReportCUDAErrors(cudaFree(cuda_biases));
   }
 }
-
 
 #endif
