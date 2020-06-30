@@ -26,16 +26,17 @@ CPU 線性代數庫 （加速 CPU 端神經網路運算）
     
 CPU 加速 （加速 CPU 線性代數庫)
 
-    $ cmake .. -DUSE_AVX
-    $ cmake .. -DUSE_OPENMP
+    $ cmake .. -DUSE_AVX=1
+    $ cmake .. -DUSE_OPENMP=1
 
-GPU 加速 （加速 GPU 端神經網路運算，僅需安裝 CUDA，不需要安裝 cuDNN）
+GPU 加速 （加速 GPU 端神經網路運算，cuDNN可選）
 
     $ cmake .. -DGPU_BACKEND=CUDA
+    $ cmake .. -DUSE_CUDNN=1
 
 ZLIB 庫
     
-    $ cmake .. -DUSE_ZLIB
+    $ cmake .. -DUSE_ZLIB=1
     
     
 # 如何使用
@@ -47,8 +48,9 @@ ZLIB 庫
 # TODO
 - [ ] 支援 SGF 格式
 - [ ] 增加時間控制器
+- [ ] 增加參數的優化算法 
 - [ ] 提昇 CUDA 運行效率 
-- [ ] 增加 cuDNN 的支援
+- [ ] 增加 GPU 端多線程的加速 
 - [ ] 增加 OpenCL 的支援 
 - [ ] 提昇內建 blas 的效率 
 - [ ] 增加 KataGo 網路權重的支援 
