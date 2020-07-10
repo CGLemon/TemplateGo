@@ -42,7 +42,7 @@ ZLIB 庫
     $ ./TemplateGo -w <Network file>.txt -p 100
 
 # GTP 界面
-可以使用支援 GTP 的 UI 界面（例：sabaki :https://sabaki.yichuanshen.de/　），以下範例
+可以使用支援 GTP 的 UI 界面（例：sabaki https://sabaki.yichuanshen.de/ ），以下範例
 
     $ ./TemplateGo -g -w <Network file>.txt -p 100
 
