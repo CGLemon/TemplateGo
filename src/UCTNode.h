@@ -84,11 +84,17 @@ private:
   UCTNode *read_ptr(uint64_t v) const;
 };
 
-inline bool Edge::is_pointer() const { is_pointer(m_pointer.load()); }
+inline bool Edge::is_pointer() const {
+  return is_pointer(m_pointer.load());
+}
 
-inline bool Edge::is_inflating() const { is_inflating(m_pointer.load()); }
+inline bool Edge::is_inflating() const {
+  return is_inflating(m_pointer.load());
+}
 
-inline bool Edge::is_uninflated() const { is_uninflated(m_pointer.load()); }
+inline bool Edge::is_uninflated() const {
+  return is_uninflated(m_pointer.load());
+}
 
 inline bool Edge::is_pointer(std::uint64_t v) const {
   return (v & POINTER_MASK) == POINTER;
