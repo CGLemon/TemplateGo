@@ -24,10 +24,6 @@ CPU 線性代數庫 （加速 CPU 端神經網路運算）
     $ cmake .. -DBLAS_BACKEND=EIGEN
     $ cmake .. -DBLAS_BACKEND=OPENBLAS
     
-CPU 加速 （加速 CPU 線性代數庫)
-
-    $ cmake .. -DUSE_AVX=1
-    $ cmake .. -DUSE_OPENMP=1
 
 GPU 加速 （加速 GPU 端神經網路運算，cuDNN可選）
 
@@ -41,9 +37,14 @@ ZLIB 庫
     
 # 如何使用
 
-下載 Leela Zero 的網路權重 https://zero.sjeng.org/ ，解壓縮後在終端機使用
+下載 Leela Zero 的網路權重 https://zero.sjeng.org/ ，解壓縮後在終端機使用，以下範例
 
     $ ./TemplateGo -w <Network file>.txt -p 100
+
+# GTP 界面
+可以使用支援 GTP 的 UI 界面（例：sabaki :https://sabaki.yichuanshen.de/　），以下範例
+
+    $ ./TemplateGo -g -w <Network file>.txt -p 100
 
 # TODO
 - [ ] 支援 SGF 格式
