@@ -40,7 +40,7 @@ class Search {
 public:
   enum class strategy_t { NN_DIRECT, NN_UCT };
 
-  static constexpr int MAX_PLAYOUYS = 10000;
+  static constexpr int MAX_PLAYOUYS = 150000;
 
   Search(GameState &state, Evaluation &evaluation);
   int think(strategy_t);
@@ -69,6 +69,7 @@ public:
   void set_running(bool);
 
 private:
+
   Evaluation & m_evaluation;
   int m_maxplayouts;
   std::atomic<bool> m_running;

@@ -1,5 +1,4 @@
 #include "blas/CPULayers.h"
-#include "NetPipe.h"
 
 #include <algorithm>
 #include <cmath>

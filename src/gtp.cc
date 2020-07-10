@@ -249,7 +249,7 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
         gtp_fail_printf("syntax not understood\n");
         return true;
       }
-      int move = search->think(Search::strategy_t::NN_DIRECT);
+      int move = search->think(Search::strategy_t::NN_UCT);
       auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
       state.play_move(move, to_move);

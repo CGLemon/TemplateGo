@@ -41,8 +41,6 @@ public:
 
   std::uint64_t randuint64() { return xoroshiro128plus(); }
 
-  void print_seed();
-
   template <int MAX> std::uint32_t randfix() {
     static_assert(0 < MAX && MAX < std::numeric_limits<std::uint32_t>::max(),
                   "randfix out of range");

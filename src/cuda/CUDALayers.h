@@ -1,7 +1,6 @@
 #ifndef CUDALAYER_H_INCLUDE
 #define CUDALAYER_H_INCLUDE
 #ifdef USE_CUDA
-#include "NetPipe.h"
 #include "cuda/CUDACommon.h"
 #include "Winograd_helper.h"
 #include <vector>
@@ -98,5 +97,25 @@ private:
   float* cuda_biases;
 };
 
+
+
+// TODO: 完成 Winograd Convolve
+class CudaWinogradConvolve3 {
+public:
+  CudaWinogradConvolve3() = default;
+  CudaWinogradConvolve3(const size_t batch,
+                        const size_t in_channels, const size_t out_channels);
+  ~CudaWinogradConvolve3();
+  void LoadingWeight(const std::vector<float> & weights);
+private:
+  static constexpr size_t inflate_radio = WINOGRAD_TILE;
+
+  int m_batch;
+  int m_in_channels;
+  int m_out_channels;
+
+  bool is_loaded{false};
+  float* cuda_weights;
+};
 #endif
 #endif

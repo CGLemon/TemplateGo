@@ -261,10 +261,10 @@ void CudaFullyConnect::LoadingWeight(const std::vector<float> &weights,
   ReportCUDAErrors(cudaMalloc(&cuda_weights, weights_size));
   ReportCUDAErrors(cudaMalloc(&cuda_biases, biases_size));
   
-  ReportCUDAErrors(cudaMemcpy(cuda_weights, weights.data(), weights_size,
-                              cudaMemcpyHostToDevice));
-  ReportCUDAErrors(cudaMemcpy(cuda_biases, biases.data(), biases_size,
-                              cudaMemcpyHostToDevice));
+  ReportCUDAErrors(cudaMemcpy(
+      cuda_weights, weights.data(), weights_size, cudaMemcpyHostToDevice));
+  ReportCUDAErrors(cudaMemcpy(
+      cuda_biases, biases.data(), biases_size, cudaMemcpyHostToDevice));
   is_loaded = true;
 }
 
@@ -310,6 +310,48 @@ CudaFullyConnect::~CudaFullyConnect() {
   if (is_loaded) {
     ReportCUDAErrors(cudaFree(cuda_weights));
     ReportCUDAErrors(cudaFree(cuda_biases));
+  }
+}
+
+CudaWinogradConvolve3::CudaWinogradConvolve3(const size_t batch,
+                                             const size_t in_channels, const size_t out_channels) {
+
+  m_batch = batch;
+  m_in_channels = in_channels;
+  m_out_channels = out_channels;
+  is_loaded = false;
+}
+
+void CudaWinogradConvolve3::LoadingWeight(const std::vector<float> & weights) {
+  if (is_loaded) return;
+  const size_t filter_3x3 = 9;
+  const size_t uninflate_size = m_in_channels * m_out_channels * filter_3x3;
+  const size_t inflate_size = m_in_channels * m_out_channels * inflate_radio;
+
+  const size_t weights_size = sizeof(float) * inflate_size;
+  
+  assert(weights.size() == uninflate_size ||
+         weights.size() == inflate_size);
+
+  auto transform_weights = std::vector<float>{};
+  if (weights.size() == uninflate_size) {
+    transform_weights 
+        = winograd_transform_f(weights, m_out_channels , m_in_channels);
+  } else {
+    transform_weights = weights;
+  }
+
+  ReportCUDAErrors(cudaMalloc(&cuda_weights, weights_size));
+  ReportCUDAErrors(
+      cudaMemcpy(cuda_weights, transform_weights.data(), weights_size, cudaMemcpyHostToDevice));
+
+  is_loaded = true;
+}
+
+
+CudaWinogradConvolve3::~CudaWinogradConvolve3() {
+  if (is_loaded) {
+    ReportCUDAErrors(cudaFree(cuda_weights));
   }
 }
 

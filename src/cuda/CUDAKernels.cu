@@ -169,7 +169,6 @@ void cuda_copy(T *a, T *b, int size) {
 }
 
 
-
 template void cuda_batchnorm<float>(float *data, const float *means,
                                     const float *stddevs, int N, int channels,
                                     int spatial_size, const float *eltwise);

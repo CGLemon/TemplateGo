@@ -343,7 +343,7 @@ float UCTNode::get_eval(int color) const {
   assert(visits > 0);
   float accumulated_evals = get_accumulated_evals();
   if (color == Board::WHITE) {
-    // accumulated_evals += static_cast<float>(m_virtual_loss);
+     accumulated_evals += static_cast<float>(m_virtual_loss);
   }
   float eval = accumulated_evals / static_cast<float>(visits);
   if (color == Board::BLACK) {
@@ -674,7 +674,7 @@ void UCT_Information::get_memory_used() {
   Utils::auto_printf("memory : %0.5f (KiB)\n", (float)memory_size / 1024.f);
 }
 
-void UCT_Information::dump_stats(UCTNode *node, GameState & state) {
+void UCT_Information::dump_stats(UCTNode *node, GameState& state) {
   const auto lcblist = node->get_lcb_list();
   const auto color = state.board.get_to_move(); 
   const auto parentsVisits = static_cast<float>(node->get_visits());
@@ -702,7 +702,7 @@ void UCT_Information::dump_stats(UCTNode *node, GameState & state) {
 }
 
 
-std::string UCT_Information::pv_to_srting(UCTNode *node, GameState & state) {
+std::string UCT_Information::pv_to_srting(UCTNode *node, GameState& state) {
   auto pvlist = std::vector<int>{};
   auto *next = node;
   while (next->has_children()) {
@@ -725,4 +725,33 @@ void UCT_Information::collect_nodes() {
 
 }
 
+bool Heuristic::pass_to_win(GameState & state, float threshold) {
+
+  const int bsize = state.board.get_boardsize();
+  size_t empty_ct = 0;
+
+  for (int y = 0; y < bsize; ++y) {
+    for (int x = 0; x < bsize; ++x) {
+      const int vtx = state.board.get_vertex(x, y);
+      if (state.board.get_state(vtx) == Board::EMPTY) {
+        empty_ct++;
+      }
+    }
+  }
+
+  auto last_move = state.board.get_last_move();
+  
+  const size_t thres =  static_cast<size_t>((bsize * bsize) * threshold);
+  if ((empty_ct < thres) || last_move == Board::PASS) {
+    const auto color = state.board.get_to_move();
+    const auto res = state.final_score();
+    if (color == Board::BLACK && res > 0.f) {
+      return true;
+    } else if (color == Board::WHITE && res < 0.f) {
+      return true;
+    }
+  }
+
+  return false;
+}
 

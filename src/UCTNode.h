@@ -236,10 +236,17 @@ class UCT_Information {
 public:
   static void get_memory_used();
 
-  static void dump_stats(UCTNode *node, GameState & state);
+  static void dump_stats(UCTNode *node, GameState& state);
 
-  static std::string pv_to_srting(UCTNode *node, GameState & state);
+  static std::string pv_to_srting(UCTNode *node, GameState& state);
 
   static void collect_nodes();
 };
+
+class Heuristic {
+public:
+  static bool pass_to_win(GameState & state, float threshold);
+
+};
+
 #endif

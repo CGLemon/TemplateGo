@@ -1,6 +1,5 @@
 #ifndef CPULAYERS_H_INCLUDE
 #define CPULAYERS_H_INCLUDE
-#include "NetPipe.h"
 #include "Winograd_helper.h"
 
 #include "blas/CPUblas.h"

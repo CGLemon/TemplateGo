@@ -15,5 +15,5 @@ void Evaluation::initialize_network(int playouts,
 
 Evaluation::NNeval Evaluation::network_eval(GameState &state,
                                             Network::Ensemble ensemble) {
-  return m_network.get_output(&state, Network::Ensemble::RANDOM_SYMMETRY);
+  return m_network.get_output(&state, ensemble);
 }

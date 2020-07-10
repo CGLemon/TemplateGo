@@ -23,8 +23,8 @@ void Desc::ConvLayerDesc::loader_biases(std::vector<float> & biases) {
 }
 
 bool Desc::ConvLayerDesc::check() {
-  const size_t w_size = N * C * W * H;
-  const size_t b_size = N;
+  const size_t w_size = oC * iC * W * H;
+  const size_t b_size = oC;
   if (w_size == m_weights.size() &&
         b_size == m_biases.size()) {
     m_weights.reserve(w_size);
@@ -109,20 +109,20 @@ bool Desc::ResidualDesc::check() {
 }
 
 void LZModel::Loader::apply_convblock(Desc::ConvBlockDesc & conv, size_t & id,
-                                      size_t N, size_t C, size_t W, size_t H) {
+                                      size_t oC, size_t iC, size_t W, size_t H) {
   auto weights = get_line();
   auto biases = get_line();
   auto means = get_line();
   auto stddevs = get_line();
 
-  conv.m_conv.N = N;
-  conv.m_conv.C = C;
+  conv.m_conv.oC = oC;
+  conv.m_conv.iC = iC;
   conv.m_conv.W = W;
   conv.m_conv.H = H;
   conv.m_conv.id = id;
   id++;
 
-  conv.m_batchnorm.C = N;
+  conv.m_batchnorm.C = oC;
   conv.m_batchnorm.id = id;
   id++;
 
@@ -147,10 +147,12 @@ void LZModel::Loader::apply_fclayer(Desc::FCLayerDesc & fc, size_t & id,
 }
 
 void LZModel::Loader::apply_resblock(Desc::ResidualDesc & resblock, size_t & id,
-                                     size_t N, size_t C, size_t W, size_t H) {
-  apply_convblock(resblock.m_conv_blocks[0], id, N, C, W, H);
-  apply_convblock(resblock.m_conv_blocks[1], id, N, C, W, H);
-  resblock.m_num_channels = C;
+                                     size_t oC, size_t iC, size_t W, size_t H) {
+  apply_convblock(resblock.m_conv_blocks[0], id, oC, iC, W, H);
+  apply_convblock(resblock.m_conv_blocks[1], id, oC, iC, W, H);
+
+  assert(iC == oC);
+  resblock.m_num_channels = iC;
 }
 
 bool LZModel::Loader::is_end() {
@@ -372,9 +374,9 @@ void LZModel::transform(bool is_winograd,
   }
 }
 
-std::pair<int, int> get_intersections_pair(int idx, int boradsize) {
-  const int x = idx % boradsize;
-  const int y = idx / boradsize;
+std::pair<int, int> get_intersections_pair(int idx, int boardsize) {
+  const int x = idx % boardsize;
+  const int y = idx / boardsize;
   return {x, y};
 }
 
@@ -443,7 +445,7 @@ NNResult LZModel::get_result(std::vector<float> & policy,
 
   for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
     const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
-    result.policy[idx] = outputs[idx];
+    result.policy[sym_idx] = outputs[idx];
   }
 
   result.policy_pass = outputs[NUM_INTERSECTIONS];

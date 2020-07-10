@@ -7,7 +7,6 @@
 #include <mutex>
 #include <unordered_map>
 
-#include "NetPipe.h"
 #include "config.h"
 #include "LZ/LZNetParameters.h"
 

@@ -31,7 +31,7 @@ public:
     void loader_weights(std::vector<float> & weights);
     void loader_biases(std::vector<float> & biases);
 
-    size_t N, C, W, H, id;
+    size_t oC, iC, W, H, id;
     std::vector<float> m_weights;
     std::vector<float> m_biases;
     
@@ -104,10 +104,10 @@ public:
       Loader(std::istream & wtfile) : m_weight_str(wtfile) {};
 
       void apply_convblock(Desc::ConvBlockDesc & conv, size_t & id,
-                           size_t N, size_t C, size_t W, size_t H);
+                           size_t oC, size_t iC, size_t W, size_t H);
 
       void apply_resblock(Desc::ResidualDesc & resblock, size_t & id,
-                          size_t N, size_t C, size_t W, size_t H);
+                          size_t oC, size_t iC, size_t W, size_t H);
 
       void apply_fclayer(Desc::FCLayerDesc & fc, size_t & id,
                          size_t inputs, size_t outputs);

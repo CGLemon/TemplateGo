@@ -17,7 +17,7 @@ std::array<std::uint64_t, 5> Zobrist::zobrist_pass;
 
 void Zobrist::init_zobrist() {
 
-  auto rng = Random::get_Rng(zobrist_seed);
+  auto rng = Random(zobrist_seed);
 
   auto count = size_t{0};
 

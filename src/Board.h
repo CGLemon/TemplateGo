@@ -36,6 +36,15 @@ public:
 
   enum class avoid_t { NONE, REAL_EYE };
 
+  // Ladder helper
+  enum class ladder_t {
+    GOOD_FOR_HUNTER,
+    GOOD_FOR_PREY,
+    GOOD_FOR_NONE,
+
+  };
+  static constexpr size_t MAX_LADDER_NODES = 1000;
+
   enum vertex_t : std::uint8_t {
     BLACK = BLACK_NUMBER,
     WHITE = WHITE_NUMBER,
@@ -54,6 +63,7 @@ public:
     W_TERR = 7,
     B_TERR = 8
   };
+
 
   static constexpr int NO_VERTEX = 0;
   static constexpr int PASS = NUM_VERTICES + 1;
@@ -114,6 +124,10 @@ public:
   int get_movenum() const;
   float get_komi(float beta = 0.0f) const;
 
+  int get_libs(const int x, const int y) const;
+  int get_libs(const int vtx) const;
+  int get_komove() const;
+
   std::uint64_t get_ko_hash() const;
   std::uint64_t get_hash() const;
   /*
@@ -140,7 +154,13 @@ public:
     =====================================================================
   */
 
+  int get_x(const int vtx) const;
+  int get_y(const int vtx) const;
+  std::pair<int, int> get_xy(const int vtx) const;
+
   int count_pliberties(const int vtx) const;
+  bool is_superko_move(const int vtx, const int color, 
+                       std::uint64_t *super_ko_history) const;
   bool is_real_eye(const int vtx, const int color) const;
   bool is_simple_eye(const int vtx, const int color) const;
   bool is_suicide(const int vtx, const int color) const;
@@ -153,7 +173,7 @@ public:
   void play_move(const int vtx, const int color);
   void play_move(const int vtx);
   bool is_legal(const int vtx, const int color,
-                std::uint64_t *super_ko_history = nullptr,
+                std::uint64_t *superko_history = nullptr,
                 avoid_t avoid = avoid_t::NONE) const;
   bool is_avoid_to_move(avoid_t, const int vtx, const int color) const;
 
@@ -173,6 +193,24 @@ public:
   void reset_territory();
   std::pair<int, int> find_territory();
   std::pair<int, int> compute_territory();
+  
+  // Ladder helper
+  bool is_neighbor(const int vtx_1, const int vtx_2) const;
+  bool would_be_ko_move(const int vtx, const int color) const;
+  int find_liberties(const int vtx, std::vector<int>& buf) const;
+  int find_liberty_gaining_captures(const int vtx, std::vector<int>& buf) const;
+  std::pair<int, int> get_libs_for_ladder(const int vtx, const int color) const;
+
+  ladder_t prey_selections(const int prey_color, const int parent, std::vector<int>& selection) const;
+  ladder_t hunter_selections(const int prey_color, const int parent, std::vector<int>& selection) const;
+  // 計算被征子方能否逃脫
+  ladder_t hunter_move(std::shared_ptr<Board> board,
+                       const int prey_color, const int parent,
+                       size_t& ladder_nodes, bool fork) const;
+  ladder_t prey_move(std::shared_ptr<Board> board,
+                     const int prey_color, const int parent,
+                     size_t& ladder_nodes, bool fork) const;
+  bool is_ladder(const int vtx) const;
 
 private:
   /*
@@ -196,13 +234,10 @@ private:
   /        棋串由單個棋子組成
   */
   struct Chain {
-    std::array<std::uint16_t, NUM_VERTICES + 1>
-        next; // next:   棋子下一個連接的棋子
-    std::array<std::uint16_t, NUM_VERTICES + 1>
-        parent; // parent: 棋串的編號，同一個棋串編號相同
-    std::array<std::uint16_t, NUM_VERTICES + 1> libs; // libs:   棋串的氣
-    std::array<std::uint16_t, NUM_VERTICES + 1>
-        stones; // stones: 棋串飽含的棋子數目
+    std::array<std::uint16_t, NUM_VERTICES+1> next; // next:   棋子下一個連接的棋子
+    std::array<std::uint16_t, NUM_VERTICES+1> parent; // parent: 棋串的編號，同一個棋串編號相同
+    std::array<std::uint16_t, NUM_VERTICES+1> libs; // libs:   棋串的氣
+    std::array<std::uint16_t, NUM_VERTICES+1> stones; // stones: 棋串包含的棋子數目
     void reset_chain();
     void add_stone(const int vtx, const int lib);
     void display_chain();
@@ -210,9 +245,7 @@ private:
 
   std::array<BitBoard, 2> m_bitstate; // 比特棋盤，目前無用
   std::array<vertex_t, NUM_VERTICES> m_state; // 棋盤狀態，包含黑子、白子、空白
-  std::array<std::uint16_t, NUM_VERTICES>
-      m_neighbours; // 四周的黑棋個數、白棋個數、空白個數，Leela
-                    // Zero 獨有的資料型態
+  std::array<std::uint16_t, NUM_VERTICES> m_neighbours; // 四周的黑棋個數、白棋個數、空白個數，Leela Zero 獨有的資料型態
   std::array<std::uint16_t, NUM_VERTICES> m_empty;
   std::array<std::uint16_t, NUM_VERTICES> m_empty_idx;
 
@@ -221,8 +254,7 @@ private:
 
   std::array<int, 2> m_prisoners; // 提子數
 
-  std::uint64_t
-      m_hash; // 雜湊值，考慮棋盤狀態、提子數、下一手為黑棋或白棋、打劫和虛手數目
+  std::uint64_t m_hash; // 雜湊值，考慮棋盤狀態、提子數、下一手為黑棋或白棋、打劫和虛手數目
   std::uint64_t m_ko_hash; // 雜湊值，僅考慮棋盤狀態，為了避免相同盤面產生
 
   int m_tomove; // 下一手為黑棋或白棋
@@ -302,9 +334,27 @@ inline void Board::update_zobrist_ko(const int new_komove,
   m_hash ^= Zobrist::zobrist_ko[new_komove];
 }
 
-inline void Board::update_zobrist_pass(const int new_pass, const int old_pass) {
+inline void Board::update_zobrist_pass(const int new_pass,
+                                       const int old_pass) {
   m_hash ^= Zobrist::zobrist_pass[old_pass];
   m_hash ^= Zobrist::zobrist_pass[new_pass];
 }
+
+inline int Board::get_x(const int vtx) const {
+  const int x = (vtx % m_letterboxsize) - 1;
+  assert(x >= 0 && x < m_boardsize);
+  return x;
+}
+inline int Board::get_y(const int vtx) const {
+  const int y = (vtx / m_letterboxsize) - 1;
+  assert(y >= 0 && y < m_boardsize);
+  return y;
+}
+inline std::pair<int, int> Board::get_xy(const int vtx) const {
+  const int x = get_x(vtx);
+  const int y = get_y(vtx);
+  return {x, y};
+}
+
 
 #endif

@@ -3,16 +3,17 @@
 
 #include <string>
 
-#define MARCRO_BOARDSIZE 19
+#define MARCRO_BOARDSIZE 9
 
 #define MARCRO_MIN_BOARDSIZE 7
 #define MARCRO_MAX_BOARDSIZE 25
 
 static constexpr int BOARD_SIZE = MARCRO_BOARDSIZE;
-static constexpr int LETTERBOX_SIZE = MARCRO_BOARDSIZE + 2;
+static constexpr int LETTERBOX_SIZE = BOARD_SIZE + 2;
 
 static constexpr int NUM_VERTICES = LETTERBOX_SIZE * LETTERBOX_SIZE;
-static constexpr int NUM_INTERSECTIONS = MARCRO_BOARDSIZE * MARCRO_BOARDSIZE;
+static constexpr int NUM_INTERSECTIONS = BOARD_SIZE * BOARD_SIZE;
+
 
 static constexpr float DEFULT_KOMI = 7.5f;
 static constexpr int DEFULT_BOARDSIZE = BOARD_SIZE;

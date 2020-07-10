@@ -22,7 +22,7 @@ private:
   int m_residual_channels;
   int m_residual_blocks;
 
-
+/*
   std::vector<float> m_conv_in;
   std::vector<float> m_conv_out;
   std::vector<float> m_res;
@@ -35,6 +35,7 @@ private:
 
   std::vector<float> m_value_conv;
   std::vector<float> m_value_layer;
+*/
 };
 
 }

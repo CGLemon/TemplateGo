@@ -6,7 +6,6 @@
 #include "Board.h"
 #include "CacheTable.h"
 #include "GameState.h"
-#include "NetPipe.h"
 #include "LZ/LZNetParameters.h"
 #include "LZ/LZModel.h"
 #include "LZ/LZCPUbackend.h"
@@ -36,8 +35,6 @@ public:
 
 private:
   void init_leelaz_batchnorm_weights();
-  std::unique_ptr<ForwardPipe> &&init_net(int channels, int residual_blocks,
-                                          std::unique_ptr<ForwardPipe> &&pipe);
 
 
   bool probe_cache(const GameState *const state, Network::Netresult &result);
@@ -52,9 +49,6 @@ private:
 
   std::unique_ptr<LZ::NNpipe> m_lz_forward;
   std::shared_ptr<LZ::LZModel::ForwardPipeWeights> m_lz_weights;
-
-
-
 
 
 

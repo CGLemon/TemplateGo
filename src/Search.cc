@@ -139,10 +139,18 @@ bool check_release(size_t tot_sz, size_t sz, std::string name) {
   return (tot_sz == 0); 
 }
 
+
+
+
 int Search::uct_search() {
   int select_move = Board::NO_VERTEX;
   bool success = true;
   bool keep_running = true;
+  bool pass_win = Heuristic::pass_to_win(m_rootstate, 0.2f);
+  if (pass_win) {
+    return Board::PASS;
+  }
+
   {
     auto root_data = std::make_shared<DataBuffer>();
     auto root_node = std::make_shared<UCTNode>(root_data);
