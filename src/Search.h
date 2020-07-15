@@ -78,7 +78,7 @@ private:
 
 
 class ThreadPool {
-  Search * m_search;
+  Search *m_search;
   std::condition_variable m_condvar;
   std::mutex m_mutex;
 
@@ -92,11 +92,11 @@ class ThreadPool {
 
 public:
   ThreadPool() = default;
-  ThreadPool(Search * search, size_t threads)  
+  ThreadPool(Search *search, size_t threads)  
                     {initialize(search, threads); };
   ~ThreadPool() { quit(); }
 
-  void initialize(Search * search, size_t threads);
+  void initialize(Search *search, size_t threads);
   void wakeup();
   void quit();
   void wait_finish();

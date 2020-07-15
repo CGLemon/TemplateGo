@@ -31,9 +31,9 @@ bool Desc::ConvLayerDesc::check() {
     m_biases.reserve(b_size);
     return true;
   } else {
-    auto_printf("id=%zu : ConvLayer fail!\n", id);
-    auto_printf("original size %zu and %zu: | object size %zu and %zu \n\n",
-                m_weights.size(), m_biases.size(), w_size, b_size);
+    static_printf("id=%zu : ConvLayer fail!\n", id);
+    static_printf("original size %zu and %zu: | object size %zu and %zu \n\n",
+                   m_weights.size(), m_biases.size(), w_size, b_size);
     return false;
   }
 }
@@ -55,9 +55,9 @@ bool Desc::BNLayerDesc::check() {
     m_stddevs.reserve(b_size);
     return true;
   } else {
-    auto_printf("id=%zu : BNLayer fail!\n", id);
-    auto_printf("original size %zu and %zu: | object size %zu and %zu \n\n",
-                m_means.size(), m_stddevs.size(), b_size, b_size);
+    static_printf("id=%zu : BNLayer fail!\n", id);
+    static_printf("original size %zu and %zu: | object size %zu and %zu \n\n",
+                   m_means.size(), m_stddevs.size(), b_size, b_size);
     return false;
   }
 }
@@ -81,9 +81,9 @@ bool Desc::FCLayerDesc::check() {
     m_biases.reserve(b_size);
     return true;
   } else {
-    auto_printf("id=%zu : FCLayer fail!\n", id);
-    auto_printf("original size %zu and %zu: | object size %zu and %zu \n\n",
-                m_weights.size(), m_biases.size(), w_size, b_size);
+    static_printf("id=%zu : FCLayer fail!\n", id);
+    static_printf("original size %zu and %zu: | object size %zu and %zu \n\n",
+                   m_weights.size(), m_biases.size(), w_size, b_size);
     return false;
   }
 }
@@ -176,7 +176,7 @@ std::vector<float> LZModel::Loader::get_line() {
       res.emplace_back(weight);
     }
   } else {
-    auto_printf("Should not be happened?");
+    static_printf("Should not be happened?\n");
     exit(-1);
   }
   return res;
@@ -210,7 +210,7 @@ void LZModel::loader(const std::string &filename,
 #ifdef USE_ZLIB
   auto gzhandle = gzopen(filename.c_str(), "rb");
   if (gzhandle == nullptr) {
-    auto_printf("Could not open weights file: %s\n", filename.c_str());
+    static_printf("Could not open weights file: %s\n", filename.c_str());
   }
 
   constexpr auto chunkBufferSize = 64 * 1024;
@@ -245,10 +245,10 @@ void LZModel::loader(const std::string &filename,
     auto iss = std::stringstream{line};
     iss >> format_version;
     if (iss.fail() || (format_version != 1 && format_version != 2)) {
-      auto_printf("Weights file is the wrong version.\n");
+      static_printf("Weights file is the wrong version.\n");
     } else {
       if (format_version == 2) {
-        auto_printf("ELF OpenGO network file is not suport.\n");
+        static_printf("ELF OpenGO network file is not suport.\n");
       } else {
         auto_printf("Loading Leelaz network file.\n");
       }
@@ -283,7 +283,7 @@ void LZModel::fill_weights(std::istream &wtfile,
       version_lines + tower_head_conv_lines + linear_lines;
   const int residual_lines = linecount - not_residual_lines;
   if (residual_lines % 8 != 0) {
-    auto_printf("\nInconsistent number of weights in the file.\n");
+    static_printf("\nInconsistent number of weights in the file.\n");
   }
 
   const int residual_blocks = residual_lines / 8;

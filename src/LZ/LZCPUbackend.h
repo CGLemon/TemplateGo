@@ -21,21 +21,6 @@ private:
   std::shared_ptr<NNWeights> m_weights;
   int m_residual_channels;
   int m_residual_blocks;
-
-/*
-  std::vector<float> m_conv_in;
-  std::vector<float> m_conv_out;
-  std::vector<float> m_res;
-
-  std::vector<float> m_winograd_V;
-  std::vector<float> m_winograd_M;
-
-
-  std::vector<float> m_policy_conv;
-
-  std::vector<float> m_value_conv;
-  std::vector<float> m_value_layer;
-*/
 };
 
 }

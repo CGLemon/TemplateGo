@@ -25,6 +25,7 @@ std::array<std::array<int, NUM_VERTICES>, Board::NUM_SYMMETRIES>
 std::array<int, 8> Board::m_dirs;
 
 void Board::BitBoard::init_bitboard(const int numvertices) {
+
   int count = numvertices / 64;
   int res = numvertices % 64;
 
@@ -193,8 +194,8 @@ void Board::init_dirs(const int boardsize) {
 }
 
 void Board::init_bitboard(const int numvertices) {
-  m_bitstate[BLACK].init_bitboard(numvertices);
-  m_bitstate[WHITE].init_bitboard(numvertices);
+  //m_bitstate[BLACK].init_bitboard(numvertices);
+  //m_bitstate[WHITE].init_bitboard(numvertices);
 }
 
 void Board::reset_board(const int boardsize, const float komi) {
@@ -211,7 +212,7 @@ void Board::reset_board(const int boardsize, const float komi) {
 
   init_symmetry_table(m_boardsize);
   init_dirs(m_boardsize);
-  init_bitboard(m_numvertices);
+  //init_bitboard(m_numvertices);
 
   m_hash = calc_hash(NO_VERTEX);
   m_ko_hash = calc_ko_hash();
@@ -314,6 +315,81 @@ bool Board::is_star(const int x, const int y) const {
   return hits >= 2;
 }
 
+void Board::tomoveStream(std::ostream &out) const {
+  if (m_tomove == Board::BLACK) {
+    out << "Black to move";
+    out << "\n";
+  } else if (m_tomove == Board::WHITE) {
+    out << "White to move";
+    out << "\n";
+  } else {
+    out << "Error to move";
+    out << "\n";
+  }
+}
+
+void Board::hashStream(std::ostream &out) const {
+  out << "HASH : ";
+  out << std::to_string(m_hash);
+  out << " | ";
+  out << "KO_HASH : ";
+  out << std::to_string(m_ko_hash);
+  out << "\n";
+}
+
+void Board::prisonersStream(std::ostream &out) const {
+  out << "BLACK (X) has captured ";
+  out << std::to_string(m_prisoners[BLACK]);
+  out << " stones\n";
+  out << "WHITE (O) has captured ";
+  out << std::to_string(m_prisoners[WHITE]);
+  out << " stones\n";
+}
+
+void Board::boardStream(std::ostream &out, const int lastmove, bool is_sgf) const {
+  m_boardsize > 9 ? (out << spcaces_to_string(3))
+                  : (out << spcaces_to_string(2));
+  out << columns_to_string(m_boardsize);
+  for (int y = 0; y < m_boardsize; y++) {
+    
+    const int row = (is_sgf ? y : m_boardsize - y - 1);
+
+    out << std::to_string(row + 1);
+    if (row < 9 && m_boardsize > 9) {
+      out << spcaces_to_string(1);
+    }
+    if (lastmove == get_vertex(0, row)) {
+      out << "(";
+    } else {
+      out << spcaces_to_string(1);
+    }
+
+    for (int x = 0; x < m_boardsize; x++) {
+      const int vtx = get_vertex(x, row);
+      const auto state = get_state(vtx);
+      out << state_to_string(
+                 static_cast<vertex_t>(state), is_star(x, row));
+
+      if (lastmove == get_vertex(x, row)) {
+        out << ")";
+      } else if (x != m_boardsize - 1 && lastmove == get_vertex(x, row) + 1) {
+        out << "(";
+      } else {
+        out << spcaces_to_string(1);
+      }
+    }
+    out << std::to_string(row + 1);
+    out << "\n";
+  }
+  m_boardsize > 9 ? (out << spcaces_to_string(3))
+                  : (out << spcaces_to_string(2));
+  out << columns_to_string(m_boardsize);
+}
+
+void Board::boardStream(std::ostream &out, const int lastmove) const {
+  boardStream(out, lastmove, true);
+}
+
 std::string Board::columns_to_string(const int bsize) const {
   auto res = std::string{};
   for (int i = 0; i < bsize; i++) {
@@ -331,16 +407,15 @@ std::string Board::columns_to_string(const int bsize) const {
 std::string Board::state_to_string(const vertex_t color, bool is_star) const {
 
   auto res = std::string{};
-  color == BLACK
-      ? res += "x"
-      : color == WHITE ? res += "o"
-                       : is_star == true
-                             ? res += "+"
-                             : color == EMPTY ? res += "."
-                                              : color == INVAL ? res += "-"
-                                                               : res += "error";
+  color == BLACK  ? res += "x" : 
+  color == WHITE  ? res += "o" : 
+  is_star == true ? res += "+" :
+  color == EMPTY  ? res += "." : 
+  color == INVAL  ? res += "-" : res += "error";
+ 
   return res;
 }
+
 std::string Board::spcaces_to_string(const int times) const {
   auto res = std::string{};
   for (int i = 0; i < times; ++i) {
@@ -349,83 +424,11 @@ std::string Board::spcaces_to_string(const int times) const {
   return res;
 }
 
-std::string Board::board_to_string(const int lastmove) const {
-
-  auto res = std::string{};
-  m_boardsize > 9 ? (res += spcaces_to_string(3))
-                  : (res += spcaces_to_string(2));
-  res += columns_to_string(m_boardsize);
-  for (int y = 0; y < m_boardsize; y++) {
-
-    res += std::to_string(y + 1);
-    if (y < 9 && m_boardsize > 9) {
-      res += spcaces_to_string(1);
-    }
-    if (lastmove == get_vertex(0, y))
-      res += "(";
-    else
-      res += spcaces_to_string(1);
-
-    for (int x = 0; x < m_boardsize; x++) {
-      const int vtx = get_vertex(x, y);
-      const auto state = get_state(vtx);
-      res += state_to_string(static_cast<vertex_t>(state), is_star(x, y));
-
-      if (lastmove == get_vertex(x, y))
-        res += ")";
-      else if (x != m_boardsize - 1 && lastmove == get_vertex(x, y) + 1)
-        res += "(";
-      else
-        res += spcaces_to_string(1);
-    }
-    res += std::to_string(y + 1);
-    res += "\n";
-  }
-  m_boardsize > 9 ? (res += spcaces_to_string(3))
-                  : (res += spcaces_to_string(2));
-  res += columns_to_string(m_boardsize);
-  return res;
-}
-
-std::string Board::prisoners_to_string() const {
-  auto res = std::string{};
-  res += "BLACK (X) has captured ";
-  res += std::to_string(m_prisoners[BLACK]);
-  res += " stones\n";
-  res += "WHITE (O) has captured ";
-  res += std::to_string(m_prisoners[WHITE]);
-  res += " stones\n";
-  return res;
-}
-
-std::string Board::hash_to_string() const {
-  auto res = std::string{};
-  res += "HASH : ";
-  res += std::to_string(m_hash);
-  res += " | ";
-  res += "KO_HASH : ";
-  res += std::to_string(m_ko_hash);
-  res += "\n";
-  return res;
-}
-
-std::string Board::to_move_to_string() const {
-  auto res = std::string{};
-  if (m_tomove == Board::BLACK) {
-    res += "Black to move";
-    res += "\n";
-  } else if (m_tomove == Board::WHITE) {
-    res += "White to move";
-    res += "\n";
-  } else {
-    res += "Error to move";
-    res += "\n";
-  }
-  return res;
-}
-
 void Board::text_display() {
-  auto res = board_to_string(m_lastmove);
+  auto out = std::ostringstream{};
+  boardStream(out, m_lastmove);
+  
+  auto res = out.str();
   auto_printf("%s\n", res.c_str());
 }
 
@@ -476,8 +479,9 @@ bool Board::is_superko_move(const int vtx, const int color,
 
   for (int k = 0; k < 4; ++k) {
     const int avtx = vtx + m_dirs[k];
-    const int libs = m_string.libs[avtx];
-    const int stones = m_string.libs[avtx];
+    const int parent = m_string.parent[avtx];
+    const int libs = m_string.libs[parent];
+    const int stones = m_string.stones[parent];
     if (libs == 1) {
       cap_times++;
     }
@@ -502,7 +506,6 @@ bool Board::is_superko_move(const int vtx, const int color,
   }
 
   return false;
-
 }
 
 bool Board::is_simple_eye(const int vtx, const int color) const {
@@ -547,11 +550,10 @@ bool Board::is_suicide(const int vtx, const int color) const {
   for (auto k = 0; k < 4; k++) {
     const int avtx = vtx + m_dirs[k];
     const int libs = m_string.libs[m_string.parent[avtx]];
-    const int get_color = m_state[avtx];
-    if (get_color == color && libs > 1) {
+    const int acolor = m_state[avtx];
+    if (acolor == color && libs > 1) {
       return false;
-
-    } else if (get_color == !color && libs <= 1) {
+    } else if (acolor == (!color) && libs <= 1) {
       return false;
     }
   }
@@ -565,7 +567,7 @@ void Board::add_stone(const int vtx, const int color) {
 
   int nbr_pars[4];
   int nbr_par_cnt = 0;
-  m_bitstate[color].add_bit(vtx);
+
   m_state[vtx] = static_cast<vertex_t>(color);
   update_zobrist(vtx, color, EMPTY);
 
@@ -593,7 +595,6 @@ void Board::remove_stone(const int vtx, const int color) {
   int nbr_pars[4];
   int nbr_par_cnt = 0;
 
-  m_bitstate[color].remove_bit(vtx);
   m_state[vtx] = EMPTY;
   update_zobrist(vtx, EMPTY, color);
 
@@ -680,7 +681,7 @@ int Board::update_board(const int vtx, const int color) {
   int captured_stones = 0;
   int captured_vtx;
 
-  for (int k = 0; k < 4; k++) {
+  for (int k = 0; k < 4; ++k) {
     const int avtx = vtx + m_dirs[k];
     const int aip = m_string.parent[avtx];
 
@@ -783,11 +784,15 @@ bool Board::is_legal(const int vtx, const int color,
 
 int Board::calc_reach_color(int color) const {
   auto buf = std::vector<bool>(m_numvertices, false);
-  return calc_reach_color(color, EMPTY, buf, false);
+  auto peekState = [&] (int vtx) {
+    return m_state[vtx];
+  };
+
+  return calc_reach_color(color, EMPTY, buf, peekState);
 }
 
 int Board::calc_reach_color(int color, int spread_color,
-                            std::vector<bool> &buf, bool is_territory) const {
+                            std::vector<bool> &buf, std::function<int(int)> f_peek) const {
   if (buf.size() != m_numvertices) {
     buf.resize(m_numvertices);
   }
@@ -796,9 +801,8 @@ int Board::calc_reach_color(int color, int spread_color,
   for (int y = 0; y < m_boardsize; y++) {
     for (int x = 0; x < m_boardsize; x++) {
       const int vertex = get_vertex(x, y);
-      const int peek =
-          is_territory ? static_cast<int>(m_territory[vertex]) :
-                         static_cast<int>(m_state[vertex]);
+      const int peek = f_peek(vertex);
+
       if (peek == color) {
         reachable++;
         buf[vertex] = true;
@@ -809,15 +813,13 @@ int Board::calc_reach_color(int color, int spread_color,
     }
   }
   while (!open.empty()) {
-    /* colored field, spread */
     const int vertex = open.front();
     open.pop();
 
     for (int k = 0; k < 4; ++k) {
       const int neighbor = vertex + m_dirs[k];
-      const int peek =
-          is_territory ? static_cast<int>(m_territory[neighbor]) :
-                         static_cast<int>(m_state[neighbor]);
+      const int peek = f_peek(vertex);
+
       if (!buf[neighbor] && peek == spread_color) {
         reachable++;
         buf[neighbor] = true;
@@ -844,42 +846,50 @@ float Board::area_score(float komi, Board::rule_t rule) {
   return 0.0f;
 }
 
-void Board::find_dame() {
+void Board::find_dame(std::array<territory_t, NUM_VERTICES>& territory) {
   auto black = std::vector<bool>(m_numvertices, false);
   auto white = std::vector<bool>(m_numvertices, false);
 
-  calc_reach_color(BLACK, EMPTY, black, false);
-  calc_reach_color(WHITE, EMPTY, white, false);
+  auto peekState = [&] (int vtx) {
+    return m_state[vtx];
+  };
+
+  calc_reach_color(BLACK, EMPTY, black, peekState);
+  calc_reach_color(WHITE, EMPTY, white, peekState);
 
   for (int y = 0; y < m_boardsize; ++y) {
     for (int x = 0; x < m_boardsize; ++x) {
       int vertex = get_vertex(x, y);
       if (black[vertex] && white[vertex]) {
-        m_territory[vertex] = DAME;
+        territory[vertex] = DAME;
       }
     }
   }
 }
 
-void Board::find_seki() {
+void Board::find_seki(std::array<territory_t, NUM_VERTICES>& territory) {
   auto black_seki = std::vector<bool>(m_numvertices, false);
   auto white_seki = std::vector<bool>(m_numvertices, false);
 
-  calc_reach_color(DAME, B_STONE, black_seki, true);
-  calc_reach_color(DAME, W_STONE, white_seki, true);
+  auto peekTerritory = [&] (int vtx) {
+    return territory[vtx];
+  };
+
+  calc_reach_color(DAME, B_STONE, black_seki, peekTerritory);
+  calc_reach_color(DAME, W_STONE, white_seki, peekTerritory);
 
   for (int y = 0; y < m_boardsize; ++y) {
     for (int x = 0; x < m_boardsize; ++x) {
       const int vertex = get_vertex(x, y);
       if ((black_seki[vertex] || white_seki[vertex]) &&
-          m_territory[vertex] != DAME) {
-        m_territory[vertex] = SEKI;
+          territory[vertex] != DAME) {
+        territory[vertex] = SEKI;
       }
     }
   }
 }
 
-std::pair<int, int> Board::find_territory() {
+std::pair<int, int> Board::find_territory(std::array<territory_t, NUM_VERTICES>& territory) {
   int b_terr_count = 0;
   int w_terr_count = 0;
 
@@ -887,21 +897,23 @@ std::pair<int, int> Board::find_territory() {
   auto b_territory = std::vector<bool>(m_numvertices, false);
   auto w_territory = std::vector<bool>(m_numvertices, false);
 
-  bool is_territory = true;
-  calc_reach_color(SEKI, EMPTY_I, seki_eye, is_territory);
-  calc_reach_color(B_STONE, EMPTY_I, b_territory, is_territory);
-  calc_reach_color(W_STONE, EMPTY_I, w_territory, is_territory);
+  auto peekTerritory = [&] (int vtx) {
+    return territory[vtx];
+  };
+  calc_reach_color(SEKI, EMPTY_I, seki_eye, peekTerritory);
+  calc_reach_color(B_STONE, EMPTY_I, b_territory, peekTerritory);
+  calc_reach_color(W_STONE, EMPTY_I, w_territory, peekTerritory);
 
   for (int y = 0; y < m_boardsize; ++y) {
     for (int x = 0; x < m_boardsize; ++x) {
       int vertex = get_vertex(x, y);
-      if (seki_eye[vertex] && m_territory[vertex] != SEKI) {
-        m_territory[vertex] = SEKI_EYE;
-      } else if (b_territory[vertex] && m_territory[vertex] != B_STONE) {
-        m_territory[vertex] = B_TERR;
+      if (seki_eye[vertex] && territory[vertex] != SEKI) {
+        territory[vertex] = SEKI_EYE;
+      } else if (b_territory[vertex] && territory[vertex] != B_STONE) {
+        territory[vertex] = B_TERR;
         b_terr_count++;
-      } else if (w_territory[vertex] && m_territory[vertex] != W_STONE) {
-        m_territory[vertex] = W_TERR;
+      } else if (w_territory[vertex] && territory[vertex] != W_STONE) {
+        territory[vertex] = W_TERR;
         w_terr_count++;
       }
     }
@@ -910,26 +922,28 @@ std::pair<int, int> Board::find_territory() {
 }
 
 std::pair<int, int> Board::compute_territory() {
-  reset_territory();
-  find_dame();
-  find_seki();
-  return find_territory();
+
+  auto territory = std::array<territory_t, NUM_VERTICES>{};
+  reset_territory(territory);
+  find_dame(territory);
+  find_seki(territory);
+  return find_territory(territory);
 }
 
-void Board::reset_territory() {
-  for (int vertex = 0; vertex < m_numvertices; vertex++) {
-    switch (m_state[vertex]) {
+void Board::reset_territory(std::array<territory_t, NUM_VERTICES>& territory) {
+  for (int vtx = 0; vtx < m_numvertices; ++vtx) {
+    switch (m_state[vtx]) {
     case BLACK:
-      m_territory[vertex] = B_STONE;
+      territory[vtx] = B_STONE;
       break;
     case WHITE:
-      m_territory[vertex] = W_STONE;
+      territory[vtx] = W_STONE;
       break;
     case EMPTY:
-      m_territory[vertex] = EMPTY_I;
+      territory[vtx] = EMPTY_I;
       break;
     case INVAL:
-      m_territory[vertex] = INVAL_I;
+      territory[vtx] = INVAL_I;
       break;
     }
   }
@@ -956,25 +970,45 @@ void Board::exchange_to_move() {
   update_zobrist_tomove(BLACK, WHITE);
 }
 
-bool Board::is_in_board(const int vtx) { return m_state[vtx] != INVAL; }
-
-int Board::get_boardsize() const { return m_boardsize; }
-
-float Board::get_komi(float beta) const {
-  return beta + m_komi_float + static_cast<float>(m_komi_integer);
+bool Board::is_in_board(const int vtx) {
+  return m_state[vtx] != INVAL;
 }
 
-int Board::get_to_move() const { return m_tomove; }
+int Board::get_boardsize() const {
+  return m_boardsize;
+}
 
-int Board::get_last_move() const { return m_lastmove; }
+float Board::get_komi() const {
+  return m_komi_float + static_cast<float>(m_komi_integer);
+}
 
-std::uint64_t Board::get_ko_hash() const { return m_ko_hash; }
+int Board::get_to_move() const { 
+  return m_tomove; 
+}
 
-std::uint64_t Board::get_hash() const { return m_hash; }
+int Board::get_last_move() const { 
+  return m_lastmove;
+}
 
-int Board::get_passes() const { return m_passes; }
+std::uint64_t Board::get_ko_hash() const { 
+  return m_ko_hash;
+}
 
-int Board::get_movenum() const { return m_movenum; }
+std::uint64_t Board::get_hash() const {
+  return m_hash;
+}
+
+int Board::get_passes() const {
+  return m_passes;
+}
+
+int Board::get_movenum() const {
+  return m_movenum;
+}
+
+int Board::get_komove() const {
+  return m_komove;
+}
 
 int Board::get_libs(const int x, const int y) const {
   const int vtx = get_vertex(x, y);
@@ -986,31 +1020,74 @@ int Board::get_libs(const int vtx) const {
   return m_string.libs[parent];
 }
 
-int Board::get_komove() const { return m_komove; }
+void Board::vertexStream(std::ostream &out, int vertex) const {
+  assert(vertex != NO_VERTEX);
 
-
-std::string Board::vertex_to_string(int vertex) const {
-  if (vertex == Board::PASS) {
-    return std::string{"pass"};
-  } else if (vertex == Board::RESIGN) {
-    return std::string{"resign"};
+  if (vertex == PASS) {
+    out << "pass";
+    return;
+  } else if (vertex == RESIGN) {
+    out << "resign";
+    return;
   }
-  const int x = vertex % (m_boardsize + 2);
-  const int y = vertex / (m_boardsize + 2);
+  const int x = get_x(vertex);
+  const int y = get_y(vertex);
 
-  auto res = std::string{};
-  char x_char = x + 64;
+  char x_char = static_cast<char>(x) + 65;
   if (x_char >= 'I') {
     x_char++;
   }
-  auto y_str = std::to_string(y);
+  auto y_str = std::to_string(y + 1);
 
-  res += x_char;
-  res += y_str;
-  return res;
+  out << x_char;
+  out << y_str;
 }
 
-// Ladder helper
+
+
+std::string Board::vertex_to_string(int vertex) const {
+  auto res = std::ostringstream{};
+  vertexStream(res, vertex);
+
+  return res.str();
+}
+
+
+void Board::sgfStream(std::ostream &out,
+                      const int vertex, const int color) const {
+  assert(vertex != NO_VERTEX);
+  
+  if (color == BLACK) {
+    out << "B";
+  } else if (color == WHITE) {
+    out << "W";
+  } else {
+    out << "error";
+  }
+
+  if (vertex == PASS || vertex == RESIGN) {
+    out << "[]";
+  } else if (vertex > NO_VERTEX && vertex < m_numvertices){
+    const int x = get_x(vertex);
+    const int y = get_y(vertex);
+
+    const char x_char = static_cast<char>(x)
+                            + (x < 25 ? 'a' : 'A');
+    const char y_char = static_cast<char>(y)
+                            + (y < 25 ? 'a' : 'A');
+    
+    out << '[';
+    out << x_char << y_char;
+    out << ']';
+  } else {
+    out << "[error]";
+  }
+}
+
+void Board::sgfStream(std::ostream &out) const {
+  sgfStream(out, m_lastmove, m_tomove);
+}
+
 int Board::find_liberties(const int vtx,
                           std::vector<int>& buf) const {
   size_t numFound = 0;
@@ -1020,9 +1097,8 @@ int Board::find_liberties(const int vtx,
     for(int k = 0; k < 4; ++k) {
       const int avtx = next + m_dirs[k];
       if(m_state[avtx] == EMPTY) {
-        //Check for dups
-        auto begin = buf.begin();
-        auto end = buf.end();
+        auto begin = std::begin(buf);
+        auto end = std::end(buf);
         auto res = std::find(begin, end, avtx);
         if (res == end) {
           buf.emplace_back(avtx);
@@ -1118,8 +1194,10 @@ std::pair<int, int> Board::get_libs_for_ladder(const int vtx, const int color) c
   return {lower_bound, upper_bound};
 }
 
-Board::ladder_t Board::prey_selections(const int prey_color, const int parent, std::vector<int>& selection) const {
+Board::ladder_t Board::prey_selections(const int prey_color,
+                                       const int parent, std::vector<int>& selection) const {
   assert(selection.empty());
+
   const int libs = m_string.libs[parent];
   if (libs >= 2 || m_komove != NO_VERTEX) {
     // If we are the prey and the hunter left a simple ko point, assume we already win
@@ -1127,68 +1205,54 @@ Board::ladder_t Board::prey_selections(const int prey_color, const int parent, s
     // This should also hopefully prevent any possible infinite loops - I don't know of any infinite loop
     // that would come up in a continuous atari sequence that doesn't ever leave a simple ko point.
 
-    // Prey is winner in this search!
     return ladder_t::GOOD_FOR_PREY;
   }
   assert(libs == 1);
 
   int num_move = find_liberties(parent, selection);
   assert(num_move == libs);
+  const int move = selection[0];
 
-  auto bound = get_libs_for_ladder(selection[0], prey_color);
-  const int lower_bound = bound.first;
-  const int upper_bound = bound.second;
-  if (lower_bound >= 3) {
-    // Prey is winner in this search!
-    return ladder_t::GOOD_FOR_PREY;
+  num_move += find_liberty_gaining_captures(parent, selection);
+
+  selection.erase(
+    std::remove_if(std::begin(selection), std::end(selection), [=](int v){ return is_legal(v, prey_color); }),
+    std::end(selection)
+  );
+
+
+  num_move = selection.size();
+  if (num_move == 0) {
+    return ladder_t::GOOD_FOR_HUNTER; 
   }
 
-  // Appending capture move
-  num_move += find_liberty_gaining_captures(parent, selection);
-  if (num_move == 1 && upper_bound == 1) {
-    // Hunter is winner in this search!
-    return ladder_t::GOOD_FOR_HUNTER;
+  if (selection[0] == move) {
+    auto bound = get_libs_for_ladder(move, prey_color);
+    const int lower_bound = bound.first;
+    const int upper_bound = bound.second;
+    if (lower_bound >= 3) {
+      return ladder_t::GOOD_FOR_PREY;
+    }
+    if (num_move == 1  && upper_bound == 1) {
+      return ladder_t::GOOD_FOR_HUNTER;
+    }
   }
 
   return ladder_t::GOOD_FOR_NONE; // keep running
 }
 
-bool Board::would_be_ko_move(const int vtx, const int color) const {
-  const int opp = (!color);
-  if (!is_simple_eye(vtx, opp)) {
-    return false;
-  }
-
-  int capture_vtx = NO_VERTEX;
-
-  for (int k = 0; k < 4; ++k) {
-    const int avtx = vtx + m_dirs[k];
-    if (get_libs(avtx) == 1 && capture_vtx == NO_VERTEX) {
-      capture_vtx = avtx;
-    } else {
-      return false;
-    }
-  }
-  if (capture_vtx == NO_VERTEX) {
-    return false;
-  }
-  if (m_string.stones[capture_vtx] != 1) {
-    return false;
-  }
-  return true;
-}
-
 bool Board::is_neighbor(const int vtx_1, const int vtx_2) const {
   for (int k = 0; k < 4; ++k) {
-      const int avtx = vtx_1 + m_dirs[k];
-      if (avtx == vtx_2) {
-        return true;
-      }
+    const int avtx = vtx_1 + m_dirs[k];
+    if (avtx == vtx_2) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
-Board::ladder_t Board::hunter_selections(const int prey_color, const int parent, std::vector<int>& selection) const {
+Board::ladder_t Board::hunter_selections(const int prey_color,
+                                         const int parent, std::vector<int>& selection) const {
   assert(selection.empty());
 
   const int libs = m_string.libs[parent];
@@ -1247,8 +1311,8 @@ Board::ladder_t Board::hunter_selections(const int prey_color, const int parent,
 }
 
 Board::ladder_t Board::hunter_move(std::shared_ptr<Board> board,
-                                   const int prey_color, const int parent,
-                                   size_t& ladder_nodes, bool fork) const {
+                                   const int vtx, const int prey_color,
+                                   const int parent, size_t& ladder_nodes, bool fork) const {
 
   if ((++ladder_nodes) >= MAX_LADDER_NODES) {
     // If hit the limit, assume prey is winner. 
@@ -1260,6 +1324,13 @@ Board::ladder_t Board::hunter_move(std::shared_ptr<Board> board,
     ladder_board = std::make_shared<Board>(*board);
   } else {
     ladder_board = board;
+  }
+
+  if (vtx != NO_VERTEX) {
+    const int color =ladder_board->get_to_move();
+    assert(color == (!prey_color));
+    ladder_board->play_move(vtx, color);
+    ladder_board->exchange_to_move();
   }
 
   auto selections = std::vector<int>{};
@@ -1279,20 +1350,15 @@ Board::ladder_t Board::hunter_move(std::shared_ptr<Board> board,
  
   for (auto i = size_t{0}; i < selection_size; ++i) {
     const int vtx = selections[i];
-    ladder_board->play_move(vtx);
-    ladder_board->exchange_to_move();
-    auto next_res = prey_move(
-                        ladder_board, prey_color, parent, ladder_nodes, next_fork);
+    auto next_res = prey_move(ladder_board, vtx, 
+                              prey_color, parent, 
+                              ladder_nodes, next_fork);
 
     assert(next_res != ladder_t::GOOD_FOR_NONE);
 
+    best  = next_res;
     if (next_res == ladder_t::GOOD_FOR_HUNTER) {
-      best  = next_res;
       break;
-    }
-
-    if (best == ladder_t::GOOD_FOR_NONE) {
-      best = next_res;
     }
   }
 
@@ -1300,8 +1366,8 @@ Board::ladder_t Board::hunter_move(std::shared_ptr<Board> board,
 }
 
 Board::ladder_t Board::prey_move(std::shared_ptr<Board> board,
-                                 const int prey_color, const int parent,
-                                 size_t& ladder_nodes, bool fork) const {
+                                 const int vtx, const int prey_color,
+                                 const int parent, size_t& ladder_nodes, bool fork) const {
   if ((++ladder_nodes) >= MAX_LADDER_NODES) {
     // If hit the limit, assume prey is winner. 
     return ladder_t::GOOD_FOR_PREY;
@@ -1312,6 +1378,14 @@ Board::ladder_t Board::prey_move(std::shared_ptr<Board> board,
     ladder_board = std::make_shared<Board>(*board);
   } else {
     ladder_board = board;
+  }
+
+  if (vtx != NO_VERTEX) {
+   const int color =ladder_board->get_to_move();
+    assert(color == prey_color);
+    ladder_board->play_move(vtx, color);
+    ladder_board->play_move(vtx);
+    ladder_board->exchange_to_move();
   }
 
   auto selections = std::vector<int>{};
@@ -1330,20 +1404,15 @@ Board::ladder_t Board::prey_move(std::shared_ptr<Board> board,
 
   for (auto i = size_t{0}; i < selection_size; ++i) {
     const int vtx = selections[i];
-    ladder_board->play_move(vtx);
-    ladder_board->exchange_to_move();
-    auto next_res = hunter_move(
-                        ladder_board, prey_color, parent, ladder_nodes, next_fork);
+    auto next_res = hunter_move(ladder_board, vtx,
+                                prey_color, parent,
+                                ladder_nodes, next_fork);
 
     assert(next_res != ladder_t::GOOD_FOR_NONE);
 
-    if (next_res == ladder_t::GOOD_FOR_HUNTER) {
-      best  = next_res;
+    best = next_res;
+    if (next_res == ladder_t::GOOD_FOR_PREY) {
       break;
-    }
-
-    if (best == ladder_t::GOOD_FOR_NONE) {
-      best = next_res;
     }
   }
 
@@ -1365,17 +1434,31 @@ bool Board::is_ladder(const int vtx) const {
 
 
   const int libs = get_libs(vtx);
+  const int ladder_parent = m_string.parent[vtx]; 
+  
   bool hunter_select;
-  if (libs == 2) {
-    hunter_select = true;
-  } else if (libs == 1) {
-    hunter_select = false;
-  } else if (libs >= 3) {
-    return false;
-  }
 
   size_t ladder_nodes = 0;
-  std::shared_ptr<Board> ladder_board;
-  return false;
+  auto res = ladder_t::GOOD_FOR_NONE;
+
+  if (libs == 2) {
+    auto ladder_board = std::make_shared<Board>(*this);
+    res = hunter_move(ladder_board,
+                      NO_VERTEX, prey_color,
+                      ladder_parent, ladder_nodes, false);
+
+  } else if (libs == 1) {
+    auto ladder_board = std::make_shared<Board>(*this);
+    res = prey_move(ladder_board,
+                    NO_VERTEX, prey_color,
+                    ladder_parent, ladder_nodes, false);
+  }
+
+  if (res == ladder_t::GOOD_FOR_NONE || res  == ladder_t::GOOD_FOR_PREY) {
+    return false;
+  }
+  assert(res == ladder_t::GOOD_FOR_HUNTER);
+
+  return true;
 }
 

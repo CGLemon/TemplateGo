@@ -3,6 +3,7 @@
 
 #include "config.h"
 
+#include <iostream>
 #include <cassert>
 #include <chrono>
 #include <vector>
@@ -12,12 +13,20 @@
 
 namespace Utils {
 
+void static_printf(const char *fmt, ...);
+
 void auto_printf(const char *fmt, ...);
+
 void stream_printf(const char *fmt, ...);
+
 void gtp_printf(const char *fmt, ...);
+
 void gtp_fail_printf(const char *fmt, ...);
+
 bool is_allnumber(std::string &);
-bool is_number(char); 
+
+bool is_number(char);
+
 bool is_float(std::string &);
 
 float cached_t_quantile(int v);

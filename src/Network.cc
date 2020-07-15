@@ -76,7 +76,7 @@ void Network::initialize(int playouts, const std::string &weightsfile,
 
   LZ::LZModel::loader(weightsfile, m_lz_weights);
   m_lz_forward->initialize(m_lz_weights);
-  auto_printf("weights push down\n");
+  static_printf("Weights are pushed down\n");
 
   m_lz_weights.reset();
 }
@@ -174,7 +174,7 @@ Network::get_output(const GameState *const state, const Ensemble ensemble,
   } else {
     assert(ensemble == RANDOM_SYMMETRY);
     assert(symmetry == -1);
-    auto rng = Random::get_Rng();
+    auto rng = Random<random_t::XorShiro128Plus>::get_Rng();
     const auto rand_sym = rng.randfix<NUM_SYMMETRIES>();
     result = get_output_internal(state, rand_sym);
   }

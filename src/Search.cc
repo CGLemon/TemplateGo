@@ -14,7 +14,13 @@ ThreadPool SearchPool;
 Search::Search(GameState &state, Evaluation &evaluation)
     : m_rootstate(state), m_evaluation(evaluation) {
   set_playout(cfg_playouts);
-  SearchPool.initialize(this, cfg_uct_threads);
+
+  int threads = cfg_uct_threads - 1;
+  if (threads < 0) {
+    threads = 0;
+  }
+
+  SearchPool.initialize(this, threads);
 }
 
 int Search::think(Search::strategy_t strategy) {
@@ -146,6 +152,7 @@ int Search::uct_search() {
   int select_move = Board::NO_VERTEX;
   bool success = true;
   bool keep_running = true;
+  bool need_resign = false;
   bool pass_win = Heuristic::pass_to_win(m_rootstate, 0.2f);
   if (pass_win) {
     return Board::PASS;
@@ -177,6 +184,8 @@ int Search::uct_search() {
     
     select_move = root_node->get_best_move();
     UCT_Information::dump_stats(m_rootnode, m_rootstate);
+
+    need_resign = Heuristic::should_be_resign(m_rootstate, m_rootnode, 0.1f);
   }
   
   success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
@@ -185,6 +194,10 @@ int Search::uct_search() {
 
   assert(success);
   assert(select_move != Board::NO_VERTEX);
+
+  if (need_resign) {
+    return Board::RESIGN;
+  }
 
   return select_move;
 }

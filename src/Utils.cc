@@ -23,7 +23,7 @@ void create_z_table() {
 */
 
 static constexpr int z_entries = 1000;
-static constexpr float z_lookup[1000] = {
+static constexpr float z_lookup[z_entries] = {
 31830.9902343750f, 223.6034393311f, 47.9277305603f, 23.3321819305f, 15.5468549728f, 12.0316534042f, 10.1026840210f, 8.9070272446f, 8.1020574570f, 7.5269541740f,
 7.0973553658f, 6.7651691437f, 6.5011448860f, 6.2865495682f, 6.1088681221f, 5.9594416618f, 5.8320994377f, 5.7223310471f, 5.6267662048f, 5.5428385735f,
 5.4685611725f, 5.4023718834f, 5.3430266380f, 5.2895226479f, 5.2410430908f, 5.1969156265f, 5.1565823555f, 5.1195764542f, 5.0855045319f, 5.0540323257f,
@@ -141,6 +141,19 @@ float Utils::cached_t_quantile(int v) {
 
 
 static std::mutex IOmutex;
+
+void Utils::static_printf(const char *fmt, ...) {
+  va_list ap;
+  va_start(ap, fmt);
+  if (cfg_logfile_stream) {
+    std::lock_guard<std::mutex> lock(IOmutex);
+    vfprintf(cfg_logfile_stream, fmt, ap);
+  } else {
+    vfprintf(stdout, fmt, ap);
+  }
+  va_end(ap);
+}
+
 
 void Utils::auto_printf(const char *fmt, ...) {
   if (cfg_quiet)

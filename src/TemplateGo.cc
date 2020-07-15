@@ -11,25 +11,20 @@
 using namespace std;
 
 
-/*
-/
-/ 所有代碼都利用 clang-format 重新整理過
-/ 參數 -style=LLVM
-/ 
-*/
+
 void normal_loop() {
 
   auto maingame = std::make_shared<GameState>();
   maingame->init_game(cfg_boardsize, cfg_komi);
 
-  gtp::init_network(*maingame);  
+  gtp::init_engine(*maingame);  
 
   while (true) {
     maingame->display();
     auto input = std::string{};
     Utils::auto_printf("TemplateGo : \n");
     if (std::getline(std::cin, input)) {
-      gtp::execute(input, *maingame);
+      gtp::execute(input);
     }
   }
 }

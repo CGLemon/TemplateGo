@@ -10,22 +10,22 @@
 void GameState::init_game(int size, float komi) {
   board.reset_board(size, komi);
 
-  game_history.clear();
-  game_history.emplace_back(std::make_shared<Board>(board));
+  m_game_history.clear();
+  m_game_history.emplace_back(std::make_shared<Board>(board));
 
-  ko_hash_history.clear();
-  ko_hash_history.emplace_back(board.get_ko_hash());
+  m_kohash_history.clear();
+  m_kohash_history.emplace_back(board.get_ko_hash());
 
-  m_resigned = Board::EMPTY;
+  m_resigned = Board::INVAL;
 }
 
 bool GameState::play_move(const int vtx, const int color) {
 
-  if (m_resigned != Board::EMPTY) {
+  if (isGameOver()) {
     return false;
   }
 
-  if (!board.is_legal(vtx, color, ko_hash_history.data())) {
+  if (!board.is_legal(vtx, color, m_kohash_history.data())) {
     return false;
   }
   if (vtx == Board::RESIGN) {
@@ -35,13 +35,13 @@ bool GameState::play_move(const int vtx, const int color) {
     board.play_move(vtx, color);
   }
   const int movenum = board.get_movenum();
-  assert(movenum == game_history.size());
+  assert(movenum == m_game_history.size());
 
-  game_history.emplace_back(std::make_shared<Board>(board));
-  game_history.resize(movenum + 1);
+  m_game_history.emplace_back(std::make_shared<Board>(board));
+  m_game_history.resize(movenum + 1);
 
-  ko_hash_history.emplace_back(board.get_ko_hash());
-  ko_hash_history.resize(movenum + 1);
+  m_kohash_history.emplace_back(board.get_ko_hash());
+  m_kohash_history.resize(movenum + 1);
 
   return true;
 }
@@ -49,9 +49,9 @@ bool GameState::play_move(const int vtx, const int color) {
 bool GameState::undo_move() {
   const int movenum = board.get_movenum();
   if (movenum > 0) {
-    board = *game_history[movenum - 1];
-    game_history.resize(movenum);
-    ko_hash_history.resize(movenum);
+    board = *m_game_history[movenum - 1];
+    m_game_history.resize(movenum);
+    m_kohash_history.resize(movenum);
     return true;
   }
   return false;
@@ -59,12 +59,12 @@ bool GameState::undo_move() {
 
 bool GameState::play_textmove(std::string input) {
 
-  std::stringstream move_string(input);
+  std::stringstream move_stream(input);
   std::string cmd;
   int cmd_count = 0;
   int color;
   int vertex;
-  while (move_string >> cmd) {
+  while (move_stream >> cmd) {
     cmd_count++;
     if (cmd_count == 1) {
       if (cmd == "black" || cmd == "b" || cmd == "B") {
@@ -143,37 +143,103 @@ void GameState::display() const {
 }
 
 std::string GameState::display_to_string() const {
-  auto res = std::string{};
-  res += "\n";
-  res += board.prisoners_to_string();
-  res += "\n";
-  res += board.to_move_to_string();
-  res += "\n";
-  res += board.board_to_string(board.get_last_move());
-  res += "\n";
-  res += board.hash_to_string();
-  return res;
+  auto out = std::ostringstream{};
+
+  out << std::endl;
+  board.prisonersStream(out);
+
+  out << std::endl;
+  board.tomoveStream(out);
+
+  out << std::endl;
+  board.boardStream(out, board.get_last_move());
+
+  out << std::endl;
+  board.hashStream(out);
+
+  return out.str();
+}
+
+std::string GameState::get_sgf_string() const {
+  std::ostringstream out;
+  const int movenum = board.get_movenum();
+  for (int p = 1; p <= movenum; ++p) {
+    out << ";";
+    auto past_board = m_game_history[p];
+    past_board->sgfStream(out);
+  }
+  return out.str();
 }
 
 std::string GameState::vertex_to_string(int vertex) const {
   return board.vertex_to_string(vertex);
 }
 
+void GameState::set_rule(Board::rule_t rule) {
+  m_rule = rule;
+}
+
 float GameState::final_score(Board::rule_t rule) {
   return board.area_score(board.get_komi(), rule);
 }
 
+float GameState::final_score() {
+  return final_score(m_rule);
+}
+
+Board::rule_t GameState::get_rule() const {
+  return m_rule;
+}
+
+int GameState::get_resigned() const {
+  return m_resigned;
+}
+
+int GameState::get_winner() {
+
+  if (get_resigned() != Board::INVAL) {
+    if (get_resigned() == Board::EMPTY) {
+      return Board::EMPTY;
+    } else {
+      return !get_resigned();
+    }
+  }
+
+  if (board.get_passes() >= 2) {
+    float score = final_score();
+    float error = 1e-4;
+    if (score > error) {
+      return Board::BLACK;
+    } else if (score < (-error)){
+      return Board::WHITE;
+    } else {
+      return Board::EMPTY;
+    }
+  }
+
+  return Board::INVAL;
+}
+
+bool GameState::isGameOver() const {
+  if (get_resigned() != Board::INVAL) {
+    return true;
+  }
+  if (board.get_passes() >= 2) {
+    return true;
+  }
+  return false;
+}
 const std::shared_ptr<Board> GameState::get_past_board(int moves_ago) const {
   const int movenum = board.get_movenum();
   assert(moves_ago >= 0 && (unsigned)moves_ago <= movenum);
-  assert(movenum + 1 <= game_history.size());
-  return game_history[movenum - moves_ago];
+  assert(movenum + 1 <= m_game_history.size());
+  return m_game_history[movenum - moves_ago];
 }
 
 bool GameState::superko() const {
 
-  auto first = crbegin(ko_hash_history);
-  auto last = crend(ko_hash_history);
+  auto first = crbegin(m_kohash_history);
+  auto last = crend(m_kohash_history);
   auto res = std::find(++first, last, board.get_ko_hash());
 
   return (res != last);

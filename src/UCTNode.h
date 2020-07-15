@@ -32,7 +32,7 @@ class Edge {
 public:
   Edge(std::shared_ptr<DataBuffer> data);
   ~Edge();
-  Edge(Edge &&n);
+  //Edge(Edge &&n);
   Edge(const Edge &) = delete;
 
   static size_t edge_tree_size;
@@ -63,12 +63,12 @@ public:
   bool is_uninflated(std::uint64_t) const;
 
   bool acquire_inflating();
-
+ 
   UCTNode *get_node() const;
 
-  UCTNode *operator->() const {
-    return read_ptr(m_pointer.load()); 
-  }
+  //UCTNode *operator->() const {
+  //  return read_ptr(m_pointer.load()); 
+  //}
 
   //Edge &operator=(Edge &&n);
 
@@ -84,7 +84,7 @@ private:
   UCTNode *read_ptr(uint64_t v) const;
 };
 
-inline bool Edge::is_pointer() const {
+inline bool Edge::is_pointer() const { 
   return is_pointer(m_pointer.load());
 }
 
@@ -99,9 +99,11 @@ inline bool Edge::is_uninflated() const {
 inline bool Edge::is_pointer(std::uint64_t v) const {
   return (v & POINTER_MASK) == POINTER;
 }
+
 inline bool Edge::is_inflating(std::uint64_t v) const {
   return (v & POINTER_MASK) == INFLATING;
 }
+
 inline bool Edge::is_uninflated(std::uint64_t v) const {
   return (v & POINTER_MASK) == UNINFLATED;
 }
@@ -174,19 +176,26 @@ public:
 
   float get_eval_lcb(int color) const;
   float get_eval_variance(float default_var) const;
-  std::vector<std::pair<float, int>> get_lcb_list();
+  std::vector<std::pair<float, int>> get_lcb_list(const int color);
   int get_best_move();
 
+  std::vector<std::pair<float, int>> get_winrate_list(const int color);
 
 private:
   std::shared_ptr<DataBuffer> m_data;
 
-  enum Status : std::uint8_t { INVALID, PRUNED, ACTIVE };
+  enum Status : std::uint8_t { 
+      INVALID, 
+      PRUNED,
+      ACTIVE 
+  };
   std::atomic<Status> m_status{ACTIVE};  
 
   int m_color{Board::EMPTY};
-  int m_vertex;
-  float m_policy;
+
+  std::atomic<int> m_visits{0}; // 節點訪問的次數
+  //int m_vertex;
+  //float m_policy;
 
   // m_raw_black_eval 黑方的網路輸出勝率
   float m_raw_black_eval{0.0f};
@@ -197,12 +206,15 @@ private:
   // m_accumulated_black_evals 黑方經樹搜索累積的 Q 值
   std::atomic<float> m_accumulated_black_evals{0.0};
 
-  std::vector<Edge> m_children;
+  std::vector<std::shared_ptr<Edge>> m_children;
 
   std::atomic<int> m_virtual_loss{0};
-  std::atomic<int> m_visits{0};
 
-  enum class ExpandState : std::uint8_t { INITIAL = 0, EXPANDING, EXPANDED };
+  enum class ExpandState : std::uint8_t { 
+      INITIAL = 0, 
+      EXPANDING, 
+      EXPANDED 
+  };
 
   std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
 
@@ -240,18 +252,23 @@ inline bool UCTNode::is_valid() const { return m_status.load() != INVALID; }
 
 class UCT_Information {
 public:
-  static void get_memory_used();
+  static size_t get_memory_used();
+  
+  static void tree_stats(); 
 
   static void dump_stats(UCTNode *node, GameState& state);
 
   static std::string pv_to_srting(UCTNode *node, GameState& state);
 
   static void collect_nodes();
+
 };
 
 class Heuristic {
 public:
   static bool pass_to_win(GameState & state, float threshold);
+
+  static bool should_be_resign(GameState & state, UCTNode *node, float threshold);
 
 };
 

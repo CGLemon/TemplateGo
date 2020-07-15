@@ -6,6 +6,9 @@
 #include <cstdlib>
 #include <memory>
 #include <string>
+#include <sstream>
+#include <iostream>
+#include <functional>
 
 #include "Zobrist.h"
 #include "config.h"
@@ -25,57 +28,62 @@
 #define WHITE_EYE_MASK (4 * (1 << WHITE_NBR_SHIFT))
 
 static std::array<int, 2> s_eyemask = {BLACK_EYE_MASK, WHITE_EYE_MASK};
-
+static_assert(sizeof(std::uint64_t) == 8, "");
 /*
 / TODO: 增加征子的判斷（ 為了支援 KataGo ）
 */
 
 class Board {
 public:
-  enum class rule_t { Tromp_Taylor, Jappanese };
+  enum class rule_t { 
+      Tromp_Taylor, 
+      Jappanese 
+  };
 
   enum class avoid_t { NONE, REAL_EYE };
 
   // Ladder helper
   enum class ladder_t {
-    GOOD_FOR_HUNTER,
-    GOOD_FOR_PREY,
-    GOOD_FOR_NONE,
-
+      GOOD_FOR_HUNTER,
+      GOOD_FOR_PREY,
+      GOOD_FOR_NONE,
   };
-  static constexpr size_t MAX_LADDER_NODES = 1000;
+  static constexpr size_t MAX_LADDER_NODES = 2000;
 
   enum vertex_t : std::uint8_t {
-    BLACK = BLACK_NUMBER,
-    WHITE = WHITE_NUMBER,
-    EMPTY = EMPTY_NUMBER,
-    INVAL = INVAL_NUMBER
+      BLACK = BLACK_NUMBER,
+      WHITE = WHITE_NUMBER,
+      EMPTY = EMPTY_NUMBER,
+      INVAL = INVAL_NUMBER
   };
 
   enum territory_t : std::uint8_t {
-    B_STONE = 0,
-    W_STONE = 1,
-    EMPTY_I = 2,
-    INVAL_I = 3,
-    DAME = 4,
-    SEKI = 5,
-    SEKI_EYE = 6,
-    W_TERR = 7,
-    B_TERR = 8
+      B_STONE = 0,
+      W_STONE = 1,
+      EMPTY_I = 2,
+      INVAL_I = 3,
+      DAME = 4,
+      SEKI = 5,
+      SEKI_EYE = 6,
+      W_TERR = 7,
+      B_TERR = 8
   };
 
 
   static constexpr int NO_VERTEX = 0;
+
   static constexpr int PASS = NUM_VERTICES + 1;
+
   static constexpr int RESIGN = NUM_VERTICES + 2;
 
   static constexpr int NUM_SYMMETRIES = 8;
+
   static constexpr int IDENTITY_SYMMETRY = 0;
 
-  static std::array<std::array<int, NUM_INTERSECTIONS>, NUM_SYMMETRIES>
-      symmetry_nn_idx_table;
-  static std::array<std::array<int, NUM_VERTICES>, NUM_SYMMETRIES>
-      symmetry_nn_vtx_table;
+  static std::array<std::array<int, NUM_INTERSECTIONS>, NUM_SYMMETRIES> symmetry_nn_idx_table;
+
+  static std::array<std::array<int, NUM_VERTICES>, NUM_SYMMETRIES> symmetry_nn_vtx_table;
+
   static std::array<int, 8> m_dirs;
 
   void reset_board(const int boardsize, const float komi);
@@ -83,7 +91,6 @@ public:
   void set_boardsize(int boardsize);
   void reset_board_data();
 
-  void set_state(const int vtx, const vertex_t);
   void set_to_move(int color);
   void exchange_to_move();
 
@@ -92,13 +99,17 @@ public:
   / 顯示目前的盤面
   */
   bool is_star(const int x, const int y) const;
-  std::string board_to_string(const int lastmove = NO_VERTEX) const;
+
   std::string state_to_string(const vertex_t color, bool is_star) const;
   std::string spcaces_to_string(const int times) const;
   std::string columns_to_string(const int bsize) const;
-  std::string prisoners_to_string() const;
-  std::string hash_to_string() const;
-  std::string to_move_to_string() const;
+
+  void tomoveStream(std::ostream &out) const;
+  void hashStream(std::ostream &out) const;
+  void prisonersStream(std::ostream &out) const;
+  void boardStream(std::ostream &out, const int lastmove = NO_VERTEX) const;
+  void boardStream(std::ostream &out, const int lastmov, bool is_sgf) const;
+
   void text_display();
   void display_chain();
   /*
@@ -122,7 +133,7 @@ public:
   int get_transform_vtx(const int vtx, const int sym = IDENTITY_SYMMETRY) const;
   int get_passes() const;
   int get_movenum() const;
-  float get_komi(float beta = 0.0f) const;
+  float get_komi() const;
 
   int get_libs(const int x, const int y) const;
   int get_libs(const int vtx) const;
@@ -140,19 +151,6 @@ public:
   void set_passes(int val);
   void increment_passes();
 
-  /*
-  / =====================================================================
-  / 更新雜湊值
-  */
-  void update_zobrist(const int vtx, const int new_color, const int old_color);
-  void update_zobrist_pris(const int color, const int new_pris,
-                           const int old_pris);
-  void update_zobrist_tomove(const int new_color, const int old_color);
-  void update_zobrist_ko(const int new_komove, const int old_komove);
-  void update_zobrist_pass(const int new_pass, const int old_pass);
-  /*
-    =====================================================================
-  */
 
   int get_x(const int vtx) const;
   int get_y(const int vtx) const;
@@ -164,11 +162,6 @@ public:
   bool is_real_eye(const int vtx, const int color) const;
   bool is_simple_eye(const int vtx, const int color) const;
   bool is_suicide(const int vtx, const int color) const;
-  void add_stone(const int vtx, const int color);
-  void remove_stone(const int vtx, const int color);
-  void merge_strings(const int ip, const int aip);
-  int remove_string(const int ip);
-  int update_board(const int vtx, const int color);
 
   void play_move(const int vtx, const int color);
   void play_move(const int vtx);
@@ -178,20 +171,23 @@ public:
   bool is_avoid_to_move(avoid_t, const int vtx, const int color) const;
 
   int calc_reach_color(int color) const;
-  int calc_reach_color(int color, int spread_color, std::vector<bool> &bd,
-                       bool is_territory) const;
+  int calc_reach_color(int color, int spread_color,
+                       std::vector<bool>& bd, std::function<int(int)> f_peek) const;
   float area_score(float komi, rule_t = rule_t::Tromp_Taylor);
 
   std::string vertex_to_string(int vertex) const;
+  void vertexStream(std::ostream &out, const int vertex) const;
 
-
+  void sgfStream(std::ostream &out,
+                 const int vtx, const int color) const;
+  void sgfStream(std::ostream &out) const;
   /*
   / TODO: seki 在非常特殊的情況下會搜尋失敗
   */
-  void find_dame();
-  void find_seki();
-  void reset_territory();
-  std::pair<int, int> find_territory();
+  void find_dame(std::array<territory_t, NUM_VERTICES>& territory);
+  void find_seki(std::array<territory_t, NUM_VERTICES>& territory);
+  void reset_territory(std::array<territory_t, NUM_VERTICES>& territory);
+  std::pair<int, int> find_territory(std::array<territory_t, NUM_VERTICES>& territory);
   std::pair<int, int> compute_territory();
   
   // Ladder helper
@@ -201,15 +197,17 @@ public:
   int find_liberty_gaining_captures(const int vtx, std::vector<int>& buf) const;
   std::pair<int, int> get_libs_for_ladder(const int vtx, const int color) const;
 
-  ladder_t prey_selections(const int prey_color, const int parent, std::vector<int>& selection) const;
-  ladder_t hunter_selections(const int prey_color, const int parent, std::vector<int>& selection) const;
+  ladder_t prey_selections(const int prey_color,
+                           const int parent, std::vector<int>& selection) const;
+  ladder_t hunter_selections(const int prey_color,
+                             const int parent, std::vector<int>& selection) const;
   // 計算被征子方能否逃脫
   ladder_t hunter_move(std::shared_ptr<Board> board,
-                       const int prey_color, const int parent,
-                       size_t& ladder_nodes, bool fork) const;
+                       const int vtx, const int prey_color,
+                       const int parent, size_t& ladder_nodes, bool fork) const;
   ladder_t prey_move(std::shared_ptr<Board> board,
-                     const int prey_color, const int parent,
-                     size_t& ladder_nodes, bool fork) const;
+                     const int vtx, const int prey_color,
+                     const int parent, size_t& ladder_nodes, bool fork) const;
   bool is_ladder(const int vtx) const;
 
 private:
@@ -243,13 +241,11 @@ private:
     void display_chain();
   };
 
-  std::array<BitBoard, 2> m_bitstate; // 比特棋盤，目前無用
+  //std::array<BitBoard, 2> m_bitstate; // 比特棋盤
   std::array<vertex_t, NUM_VERTICES> m_state; // 棋盤狀態，包含黑子、白子、空白
   std::array<std::uint16_t, NUM_VERTICES> m_neighbours; // 四周的黑棋個數、白棋個數、空白個數，Leela Zero 獨有的資料型態
   std::array<std::uint16_t, NUM_VERTICES> m_empty;
   std::array<std::uint16_t, NUM_VERTICES> m_empty_idx;
-
-  std::array<territory_t, NUM_VERTICES> m_territory; // 用於日式計地規則
   Chain m_string;                                    // 棋串
 
   std::array<int, 2> m_prisoners; // 提子數
@@ -274,6 +270,33 @@ private:
   void init_symmetry_table(const int boardsize);
   void init_dirs(const int boardsize);
   void init_bitboard(const int numvertices);
+
+  /*
+  / =====================================================================
+  / 更新雜湊值
+  */
+  void update_zobrist(const int vtx, const int new_color, const int old_color);
+  void update_zobrist_pris(const int color, const int new_pris,
+                           const int old_pris);
+  void update_zobrist_tomove(const int new_color, const int old_color);
+  void update_zobrist_ko(const int new_komove, const int old_komove);
+  void update_zobrist_pass(const int new_pass, const int old_pass);
+  /*
+    =====================================================================
+  */
+
+  /*
+  / =====================================================================
+  / 更新盤面
+  */
+  void add_stone(const int vtx, const int color);
+  void remove_stone(const int vtx, const int color);
+  void merge_strings(const int ip, const int aip);
+  int remove_string(const int ip);
+  int update_board(const int vtx, const int color);
+  /*
+    =====================================================================
+  */
 };
 
 inline int Board::get_vertex(const int x, const int y) const {
@@ -288,9 +311,6 @@ inline int Board::get_index(const int x, const int y) const {
   return y * m_boardsize + x;
 }
 
-inline void Board::set_state(const int vtx, const Board::vertex_t color) {
-  m_state[vtx] = color;
-}
 
 inline Board::vertex_t Board::get_state(int x, int y) const {
   return m_state[get_vertex(x, y)];
@@ -345,11 +365,13 @@ inline int Board::get_x(const int vtx) const {
   assert(x >= 0 && x < m_boardsize);
   return x;
 }
+
 inline int Board::get_y(const int vtx) const {
   const int y = (vtx / m_letterboxsize) - 1;
   assert(y >= 0 && y < m_boardsize);
   return y;
 }
+
 inline std::pair<int, int> Board::get_xy(const int vtx) const {
   const int x = get_x(vtx);
   const int y = get_y(vtx);

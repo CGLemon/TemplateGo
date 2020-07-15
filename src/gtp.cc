@@ -1,6 +1,8 @@
 #include <sstream>
 #include <string>
+#include <vector>
 
+#include "SGFstream.h"
 #include "Board.h"
 #include "Evaluation.h"
 #include "Search.h"
@@ -21,9 +23,30 @@
 */
 using namespace Utils;
 
-Evaluation* evaluation;
-std::shared_ptr<Search> search;
+struct GTP_Engine {
+  GTP_Engine(GameState &state) : m_state(state) {}
 
+  GameState &m_state;
+
+  std::shared_ptr<Evaluation> evaluation;
+  std::shared_ptr<Search> search;
+  
+  void init() {
+    evaluation = std::make_shared<Evaluation>();
+    evaluation->initialize_network(cfg_playouts, cfg_weightsfile);
+    search = std::make_shared<Search>(m_state, *evaluation);
+  }
+
+  int think(Search::strategy_t stg) {
+    return search->think(stg);
+  }
+
+  void benchmark(int playouts) {
+    search->benchmark(playouts);
+  }
+};
+
+GTP_Engine *engine = nullptr;
 
 std::string gtp_vertex_parser(int vertex, GameState & state) {
   assert(cfg_boardsize == state.board.get_boardsize());
@@ -47,21 +70,16 @@ void gtp::gtp_init_all(int argc, char **argv) {
                PROGRAM_NAME.c_str());
 }
 
-void gtp::init_network(GameState &state) {
-  evaluation = new Evaluation;
-  evaluation->initialize_network(cfg_playouts, cfg_weightsfile);
-  search = std::make_shared<Search>(state, *evaluation);
+void gtp::init_engine(GameState &state) {
+  if (!engine) {
+    engine = new GTP_Engine(state);
+    engine->init();
+  }
 }
 
-void gtp::execute(std::string input, GameState & state) {
+void gtp::execute(std::string input) {
 
-  bool extend_success = extend_execute(input, state);
-  if (extend_success) {
-    gtp_printf("\n");
-    return;
-  }
-
-  bool gtp_success = gtp_execute(input, state);
+  bool gtp_success = gtp_execute(input);
 
   if (!gtp_success) {
     gtp_fail_printf("unknown command\n");
@@ -69,65 +87,17 @@ void gtp::execute(std::string input, GameState & state) {
   }
 }
 
-bool gtp::extend_execute(std::string input, GameState &state) {
+bool gtp::gtp_execute(std::string input) {
 
-  std::stringstream cmd_stream(input);
-  auto cmd = std::string{};
-  cmd_stream >> cmd;
-
-  if (cmd == "play") {
-
-    std::string move_string, color, vertex;
-    int to_move = state.board.get_to_move();
-    if (to_move == Board::BLACK) {
-      color = "b";
-    } else if (to_move == Board::WHITE) {
-      color = "w";
-    } else {
-      return false;
-    }
-
-    cmd_stream >> vertex;
-
-    move_string = color + " " + vertex;
-
-    if (!cmd_stream.fail()) {
-      bool success = state.play_textmove(move_string);
-      if (success) {
-        state.exchange_to_move();
-        return true;
-      }
-    }
-  } else if (cmd == "benchmark") {
-    std::string playouts_str;
-    cmd_stream >> playouts_str;
-
-    if (cmd_stream.fail()) {
-      search->benchmark(cfg_playouts);
-    } else {
-      int playouts;
-      if (is_allnumber(playouts_str)) {
-        playouts = std::stoi(playouts_str);
-      } else {
-        playouts = cfg_playouts;
-      }
-      search->benchmark(playouts);
-    }
-    return true;
-  }
-
-  return false;
-}
-
-bool gtp::gtp_execute(std::string input, GameState &state) {
-
+  GameState &state = engine->m_state;
   std::stringstream cmd_stream(input);
   auto cmd = std::string{};
 
   cmd_stream >> cmd;
   if (cmd == "quit") {
     gtp_printf("\n");
-    delete evaluation;
+    //delete evaluation;
+    delete engine;
     exit(EXIT_SUCCESS);
 
   } else if (cmd == "protocol_version") {
@@ -235,7 +205,7 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
     cmd_stream >> color;
     int to_move;
     if (cmd_stream.fail()) {
-      int move = search->think(Search::strategy_t::NN_UCT);
+      int move = engine->think(Search::strategy_t::NN_UCT);
       auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
       state.play_move(move);
@@ -249,7 +219,7 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
         gtp_fail_printf("syntax not understood\n");
         return true;
       }
-      int move = search->think(Search::strategy_t::NN_UCT);
+      int move = engine->think(Search::strategy_t::NN_UCT);
       auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
       state.play_move(move, to_move);
@@ -277,20 +247,54 @@ bool gtp::gtp_execute(std::string input, GameState &state) {
     std::string type;
     cmd_stream >> type;
     if (cmd_stream.fail()) {
-      int move = search->think(Search::strategy_t::NN_DIRECT);
+      int move = engine->think(Search::strategy_t::NN_DIRECT);
       auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
     } else if (type == "nn-uct") {
-      int move = search->think(Search::strategy_t::NN_UCT);
+      int move = engine->think(Search::strategy_t::NN_UCT);
       auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
     } else if (type == "nn-direct") {
-      int move = search->think(Search::strategy_t::NN_DIRECT);
+      int move = engine->think(Search::strategy_t::NN_DIRECT);
       auto res = gtp_vertex_parser(move, state);
       gtp_printf("%s\n", res.c_str());
     } else {
       gtp_fail_printf("syntax not understood\n");
     }
+  } else if (cmd == "benchmark") {
+    std::string playouts_str;
+    cmd_stream >> playouts_str;
+
+    if (cmd_stream.fail()) {
+      engine->benchmark(cfg_playouts);
+    } else {
+      int playouts;
+      if (is_allnumber(playouts_str)) {
+        playouts = std::stoi(playouts_str);
+      } else {
+        playouts = cfg_playouts;
+      }
+      engine->benchmark(playouts);
+    }
+    gtp_printf("\n");
+  } else if (cmd == "printsgf") {
+    std::string fname;
+    cmd_stream >> fname;
+    if (cmd_stream.fail()) {
+      auto res = state.get_sgf_string();
+      gtp_printf("%s\n", res.c_str());
+    } else {
+      SGFstream::save_sgf(fname, state);
+      gtp_printf("\n");
+    }
+  } else if (cmd == "auto") {
+    while(!state.isGameOver()) {
+      int move = engine->think(Search::strategy_t::NN_UCT);
+      state.play_move(move);
+      state.exchange_to_move();
+      state.display();
+    }
+    gtp_printf("\n");
   } else {
     return false;
   }

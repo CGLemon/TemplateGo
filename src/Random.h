@@ -11,7 +11,12 @@
  https://github.com/lemire/testingRNG
  */
 
+
+static constexpr std::uint64_t THREADS_SEED = 0;
+static constexpr std::uint64_t TIME_SEED = 1;
+
 namespace random_utils {
+
 static inline std::uint64_t splitmix64(std::uint64_t z) {
   /*
    The parameter detail are from
@@ -30,38 +35,69 @@ static inline std::uint64_t rotl(const std::uint64_t x, const int k) {
 
 } // namespace random_utils
 
+
+enum class random_t {
+  SplitMix_64,
+  XorShiro128Plus
+};
+
+template<random_t RandomType>
 class Random {
 public:
+  static constexpr size_t SEED_SZIE = 2;
+
   Random() = delete;
-  Random(std::uint64_t default_seed = 0);
 
-  static Random &get_Rng(const std::uint64_t seed = 0);
+  Random(std::uint64_t seed) { seed_init(seed); }
+  
+  static Random &get_Rng(const std::uint64_t seed = THREADS_SEED);
 
-  void seed_init(std::uint64_t);
+  std::uint64_t randuint64();
 
-  std::uint64_t randuint64() { return xoroshiro128plus(); }
-
-  template <int MAX> std::uint32_t randfix() {
-    static_assert(0 < MAX && MAX < std::numeric_limits<std::uint32_t>::max(),
-                  "randfix out of range");
-    // Last bit isn't random, so don't use it in isolation. We specialize
-    // this case.
-    static_assert(MAX != 2, "don't isolate the LSB with xoroshiro128+");
-    return xoroshiro128plus() % MAX;
+  template<int Range>
+  std::uint32_t randfix() {
+    static_assert(0 < Range && Range < std::numeric_limits<std::uint32_t>::max(),
+                "randfix out of range");
+    return randuint64() % Range;
   }
-
+ 
   using result_type = std::uint64_t;
+
   constexpr static result_type min() {
     return std::numeric_limits<result_type>::min();
   }
   constexpr static result_type max() {
     return std::numeric_limits<result_type>::max();
   }
-  result_type operator()() { return xoroshiro128plus(); }
+
+  result_type operator()() { return randuint64(); }
 
 private:
-  std::uint64_t xoroshiro128plus();
-  static thread_local std::uint64_t m_s[2];
+  void seed_init(std::uint64_t);
+
+  static thread_local std::array<std::uint64_t, SEED_SZIE> m_seeds;
 };
 
+
+template<random_t T>
+void Random<T>::seed_init(std::uint64_t seed) {
+  if (seed == THREADS_SEED) {
+    auto thread_id = std::hash<std::thread::id>()(std::this_thread::get_id());
+    seed = static_cast<std::uint64_t>(thread_id);
+  } else if (seed == TIME_SEED) {
+    auto get_time = std::time(NULL);
+    seed = static_cast<std::uint64_t>(get_time);
+  }
+  const size_t size = m_seeds.size(); 
+  for (auto i = size_t{0}; i < size; ++i) {
+    seed = random_utils::splitmix64(seed);
+    m_seeds[i] = seed;
+  }
+}
+
+template<random_t T>
+Random<T> &Random<T>::get_Rng(const std::uint64_t seed) {
+  static thread_local Random s_rng{seed};
+  return s_rng;
+}
 #endif

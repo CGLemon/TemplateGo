@@ -42,6 +42,7 @@ public:
                void * cuda_scratch, size_t scratch_size, CudaHandel * handel);
   
   // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
+  // 不支持 cuDNN
   void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
   void LoadingWeight(const std::vector<float> &weights, size_t & scratch_size);
 
@@ -81,7 +82,6 @@ public:
                float *output, CudaHandel * handel);
   
   // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體 
-  // 不支持 cuDNN
   void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
 
   void LoadingWeight(const std::vector<float> &weights,

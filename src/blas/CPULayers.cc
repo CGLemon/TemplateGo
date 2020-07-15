@@ -308,8 +308,12 @@ void Convolve::Forward(const size_t filter_size, const size_t outputs,
 
   im2col(filter_size, input_channels, input, col);
 
-  blas::fixed_gemm(outputs, spatial_size, filter_dim, 1.0f, weights, filter_dim,
-                   col, spatial_size, 0.0f, output, spatial_size);
+  blas::fixed_gemm(outputs, spatial_size, filter_dim,
+                   1.0f,
+                   weights, filter_dim,
+                   col, spatial_size,
+                   0.0f,
+                   output, spatial_size);
 
   for (unsigned int o = 0; o < outputs; o++) {
     for (unsigned int b = 0; b < spatial_size; b++) {
@@ -327,8 +331,13 @@ void Convolve_1::Forward(const size_t outputs, const std::vector<float> &input,
   const int filter_dim = input_channels;
   assert(outputs * spatial_size == output.size());
 
-  blas::fixed_gemm(outputs, spatial_size, filter_dim, 1.0f, weights, filter_dim,
-                   input, spatial_size, 0.0f, output, spatial_size);
+  blas::fixed_gemm(outputs, spatial_size, filter_dim,
+                   1.0f, 
+                   weights, filter_dim,
+                   input, spatial_size,
+                   0.0f, 
+                   output, spatial_size);
+
 
   for (unsigned int o = 0; o < outputs; o++) {
     for (unsigned int b = 0; b < spatial_size; b++) {
