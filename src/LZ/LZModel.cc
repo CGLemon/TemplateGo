@@ -176,7 +176,7 @@ std::vector<float> LZModel::Loader::get_line() {
       res.emplace_back(weight);
     }
   } else {
-    static_printf("Should not be happened?\n");
+    static_printf("Should be not happened?\n");
     exit(-1);
   }
   return res;

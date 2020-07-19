@@ -95,6 +95,6 @@ void SGFstream::sgf_stream(std::ostream &out,
 
   out << state.get_sgf_string();
   out << ")";
-
+  out << std::endl;
 }
 

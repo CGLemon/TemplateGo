@@ -315,7 +315,7 @@ bool Board::is_star(const int x, const int y) const {
   return hits >= 2;
 }
 
-void Board::tomoveStream(std::ostream &out) const {
+void Board::tomove_stream(std::ostream &out) const {
   if (m_tomove == Board::BLACK) {
     out << "Black to move";
     out << "\n";
@@ -328,7 +328,7 @@ void Board::tomoveStream(std::ostream &out) const {
   }
 }
 
-void Board::hashStream(std::ostream &out) const {
+void Board::hash_stream(std::ostream &out) const {
   out << "HASH : ";
   out << std::to_string(m_hash);
   out << " | ";
@@ -337,7 +337,7 @@ void Board::hashStream(std::ostream &out) const {
   out << "\n";
 }
 
-void Board::prisonersStream(std::ostream &out) const {
+void Board::prisoners_stream(std::ostream &out) const {
   out << "BLACK (X) has captured ";
   out << std::to_string(m_prisoners[BLACK]);
   out << " stones\n";
@@ -346,7 +346,7 @@ void Board::prisonersStream(std::ostream &out) const {
   out << " stones\n";
 }
 
-void Board::boardStream(std::ostream &out, const int lastmove, bool is_sgf) const {
+void Board::board_stream(std::ostream &out, const int lastmove, bool is_sgf) const {
   m_boardsize > 9 ? (out << spcaces_to_string(3))
                   : (out << spcaces_to_string(2));
   out << columns_to_string(m_boardsize);
@@ -386,8 +386,8 @@ void Board::boardStream(std::ostream &out, const int lastmove, bool is_sgf) cons
   out << columns_to_string(m_boardsize);
 }
 
-void Board::boardStream(std::ostream &out, const int lastmove) const {
-  boardStream(out, lastmove, true);
+void Board::board_stream(std::ostream &out, const int lastmove) const {
+  board_stream(out, lastmove, true);
 }
 
 std::string Board::columns_to_string(const int bsize) const {
@@ -426,7 +426,7 @@ std::string Board::spcaces_to_string(const int times) const {
 
 void Board::text_display() {
   auto out = std::ostringstream{};
-  boardStream(out, m_lastmove);
+  board_stream(out, m_lastmove);
   
   auto res = out.str();
   auto_printf("%s\n", res.c_str());
@@ -846,7 +846,7 @@ float Board::area_score(float komi, Board::rule_t rule) {
   return 0.0f;
 }
 
-void Board::find_dame(std::array<territory_t, NUM_VERTICES>& territory) {
+void Board::find_dame(std::array<territory_t, NUM_VERTICES> &territory) {
   auto black = std::vector<bool>(m_numvertices, false);
   auto white = std::vector<bool>(m_numvertices, false);
 
@@ -867,7 +867,7 @@ void Board::find_dame(std::array<territory_t, NUM_VERTICES>& territory) {
   }
 }
 
-void Board::find_seki(std::array<territory_t, NUM_VERTICES>& territory) {
+void Board::find_seki(std::array<territory_t, NUM_VERTICES> &territory) {
   auto black_seki = std::vector<bool>(m_numvertices, false);
   auto white_seki = std::vector<bool>(m_numvertices, false);
 
@@ -889,7 +889,7 @@ void Board::find_seki(std::array<territory_t, NUM_VERTICES>& territory) {
   }
 }
 
-std::pair<int, int> Board::find_territory(std::array<territory_t, NUM_VERTICES>& territory) {
+std::pair<int, int> Board::find_territory(std::array<territory_t, NUM_VERTICES> &territory) {
   int b_terr_count = 0;
   int w_terr_count = 0;
 
@@ -930,7 +930,7 @@ std::pair<int, int> Board::compute_territory() {
   return find_territory(territory);
 }
 
-void Board::reset_territory(std::array<territory_t, NUM_VERTICES>& territory) {
+void Board::reset_territory(std::array<territory_t, NUM_VERTICES> &territory) {
   for (int vtx = 0; vtx < m_numvertices; ++vtx) {
     switch (m_state[vtx]) {
     case BLACK:
@@ -1020,7 +1020,7 @@ int Board::get_libs(const int vtx) const {
   return m_string.libs[parent];
 }
 
-void Board::vertexStream(std::ostream &out, int vertex) const {
+void Board::vertex_stream(std::ostream &out, int vertex) const {
   assert(vertex != NO_VERTEX);
 
   if (vertex == PASS) {
@@ -1047,13 +1047,13 @@ void Board::vertexStream(std::ostream &out, int vertex) const {
 
 std::string Board::vertex_to_string(int vertex) const {
   auto res = std::ostringstream{};
-  vertexStream(res, vertex);
+  vertex_stream(res, vertex);
 
   return res.str();
 }
 
 
-void Board::sgfStream(std::ostream &out,
+void Board::sgf_stream(std::ostream &out,
                       const int vertex, const int color) const {
   assert(vertex != NO_VERTEX);
   
@@ -1084,8 +1084,8 @@ void Board::sgfStream(std::ostream &out,
   }
 }
 
-void Board::sgfStream(std::ostream &out) const {
-  sgfStream(out, m_lastmove, m_tomove);
+void Board::sgf_stream(std::ostream &out) const {
+  sgf_stream(out, m_lastmove, m_tomove);
 }
 
 int Board::find_liberties(const int vtx,

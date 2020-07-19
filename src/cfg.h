@@ -36,6 +36,7 @@ extern int cfg_playouts;
 extern float cfg_allow_pass_ratio;
 extern int cfg_batchsize;
 
+extern float cfg_resign_threshold;
 
 void init_cfg();
 void arg_parser(int argc, char **argv);

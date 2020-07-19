@@ -38,6 +38,8 @@ int cfg_playouts;
 float cfg_allow_pass_ratio;
 int cfg_batchsize;
 
+float cfg_resign_threshold;
+
 void arg_parser(int argc, char **argv) {
 
   for (int i = 1; i < argc; ++i) {
@@ -99,6 +101,8 @@ void init_cfg() {
   cfg_playouts = 1600;
   cfg_allow_pass_ratio = 0.2f;
   cfg_batchsize = 1;
+
+  cfg_resign_threshold = 0.05f;
 }
 
 //TODO: 用外部文件來設定 cfg

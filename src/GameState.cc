@@ -146,16 +146,16 @@ std::string GameState::display_to_string() const {
   auto out = std::ostringstream{};
 
   out << std::endl;
-  board.prisonersStream(out);
+  board.prisoners_stream(out);
 
   out << std::endl;
-  board.tomoveStream(out);
+  board.tomove_stream(out);
 
   out << std::endl;
-  board.boardStream(out, board.get_last_move());
+  board.board_stream(out, board.get_last_move());
 
   out << std::endl;
-  board.hashStream(out);
+  board.hash_stream(out);
 
   return out.str();
 }
@@ -166,7 +166,7 @@ std::string GameState::get_sgf_string() const {
   for (int p = 1; p <= movenum; ++p) {
     out << ";";
     auto past_board = m_game_history[p];
-    past_board->sgfStream(out);
+    past_board->sgf_stream(out);
   }
   return out.str();
 }
@@ -229,6 +229,39 @@ bool GameState::isGameOver() const {
   }
   return false;
 }
+
+void GameState::result_stream(std::ostream &out) {
+  if (isGameOver()) {
+    if (get_resigned() == Board::EMPTY) {
+      out << "Draw";
+    } else if (get_resigned() == Board::BLACK) {
+      out << "White wins by resigned";
+    } else if (get_resigned() == Board::WHITE) {
+      out << "Black wins by resigned";
+    } else {
+      float score = final_score();
+      float error = 1e-4;
+      if (score > error) {
+        out << "Black wins +" << score;
+      } else if (score < (-error)){
+        score = (-score);
+        out << "White wins +" << score;
+      } else {
+        out << "Draw";
+      }
+    }
+  } else {
+    out << "continue...";
+  }
+}
+
+
+std::string GameState::result_to_string() {
+  auto out = std::ostringstream{};
+  result_stream(out);
+  return out.str();
+}
+
 const std::shared_ptr<Board> GameState::get_past_board(int moves_ago) const {
   const int movenum = board.get_movenum();
   assert(moves_ago >= 0 && (unsigned)moves_ago <= movenum);

@@ -174,7 +174,7 @@ Network::get_output(const GameState *const state, const Ensemble ensemble,
   } else {
     assert(ensemble == RANDOM_SYMMETRY);
     assert(symmetry == -1);
-    auto rng = Random<random_t::XorShiro128Plus>::get_Rng();
+    auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
     const auto rand_sym = rng.randfix<NUM_SYMMETRIES>();
     result = get_output_internal(state, rand_sym);
   }

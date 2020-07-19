@@ -182,10 +182,10 @@ int Search::uct_search() {
 
     SearchPool.wait_finish();
     
-    select_move = root_node->get_best_move();
-    UCT_Information::dump_stats(m_rootnode, m_rootstate);
+    UCT_Information::dump_stats(m_rootstate, m_rootnode);
 
-    need_resign = Heuristic::should_be_resign(m_rootstate, m_rootnode, 0.1f);
+    select_move = root_node->get_best_move();
+    need_resign = Heuristic::should_be_resign(m_rootstate, m_rootnode, cfg_resign_threshold);
   }
   
   success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");

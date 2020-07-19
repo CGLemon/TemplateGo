@@ -44,7 +44,7 @@ public:
   int get_vertex() const;
   float get_policy() const;         
   int get_visits() const;
-  float get_eval(int color) const;  // 將會刪除？
+  float get_eval(int color) const; 
 
   void inflate();
   void kill_node();
@@ -108,9 +108,13 @@ inline bool Edge::is_uninflated(std::uint64_t v) const {
   return (v & POINTER_MASK) == UNINFLATED;
 }
 
-inline int Edge::get_vertex() const { return m_data->vertex; }
+inline int Edge::get_vertex() const { 
+  return m_data->vertex; 
+}
 
-inline float Edge::get_policy() const { return m_data->policy; }
+inline float Edge::get_policy() const { 
+  return m_data->policy;
+}
 
 inline UCTNode *Edge::read_ptr(uint64_t v) const {
   assert(is_pointer(v));
@@ -243,11 +247,17 @@ inline bool UCTNode::is_expended() const {
   return m_expand_state.load() == ExpandState::EXPANDED;
 }
 
-inline bool UCTNode::is_pruned() const { return m_status.load() == PRUNED; }
+inline bool UCTNode::is_pruned() const {
+  return m_status.load() == PRUNED;
+}
 
-inline bool UCTNode::is_active() const { return m_status.load() == ACTIVE; }
+inline bool UCTNode::is_active() const {
+  return m_status.load() == ACTIVE;
+}
 
-inline bool UCTNode::is_valid() const { return m_status.load() != INVALID; }
+inline bool UCTNode::is_valid() const {
+  return m_status.load() != INVALID;
+}
 
 
 class UCT_Information {
@@ -256,7 +266,7 @@ public:
   
   static void tree_stats(); 
 
-  static void dump_stats(UCTNode *node, GameState& state);
+  static void dump_stats(GameState& state, UCTNode *node);
 
   static std::string pv_to_srting(UCTNode *node, GameState& state);
 

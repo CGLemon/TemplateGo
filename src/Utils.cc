@@ -200,10 +200,10 @@ void Utils::gtp_fail_printf(const char *fmt, ...) {
   va_end(ap);
 }
 
-bool Utils::is_allnumber(std::string & stream) {
-  int size = stream.size();
-  for (int i = 0; i < size; ++i) {
-    const char res = stream[i];
+bool Utils::is_allnumber(std::string &number_str) {
+  const size_t size = number_str.size();
+  for (auto i = size_t{0}; i < size; ++i) {
+    const char res = number_str[i];
     if (!is_number(res)) {
       return false;
     }
@@ -218,11 +218,11 @@ bool Utils::is_number(char alpha) {
   return false;
 }
 
-bool Utils::is_float(std::string & stream) {
-  int size = stream.size();
+bool Utils::is_float(std::string &float_str) {
+  const size_t size = float_str.size();
   bool point_pass = false;
-  for (int i = 0; i < size; ++i) {
-    const char res = stream[i];
+  for (auto i = size_t{0}; i < size; ++i) {
+    const char res = float_str[i];
     if (is_number(res) || res == '.' || res == '-' || res == '+') {
       if ((res == '-' || res == '+') && i != 0) {
         return false;
@@ -300,12 +300,4 @@ int Utils::Timer::get_record_count() const {
 
 float* Utils::Timer::get_record() {
   return m_record.data();
-}
-
-Utils::Exception::Exception(const std::string &what)
-    : std::runtime_error(what) {
-  std::string log = "Exception: ";
-  log += what;
-  auto_printf("%s", log.c_str());
-  stream_printf("%s", log.c_str());
 }

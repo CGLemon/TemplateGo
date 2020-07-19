@@ -104,11 +104,11 @@ public:
   std::string spcaces_to_string(const int times) const;
   std::string columns_to_string(const int bsize) const;
 
-  void tomoveStream(std::ostream &out) const;
-  void hashStream(std::ostream &out) const;
-  void prisonersStream(std::ostream &out) const;
-  void boardStream(std::ostream &out, const int lastmove = NO_VERTEX) const;
-  void boardStream(std::ostream &out, const int lastmov, bool is_sgf) const;
+  void tomove_stream(std::ostream &out) const;
+  void hash_stream(std::ostream &out) const;
+  void prisoners_stream(std::ostream &out) const;
+  void board_stream(std::ostream &out, const int lastmove = NO_VERTEX) const;
+  void board_stream(std::ostream &out, const int lastmov, bool is_sgf) const;
 
   void text_display();
   void display_chain();
@@ -176,19 +176,11 @@ public:
   float area_score(float komi, rule_t = rule_t::Tromp_Taylor);
 
   std::string vertex_to_string(int vertex) const;
-  void vertexStream(std::ostream &out, const int vertex) const;
+  void vertex_stream(std::ostream &out, const int vertex) const;
 
-  void sgfStream(std::ostream &out,
+  void sgf_stream(std::ostream &out,
                  const int vtx, const int color) const;
-  void sgfStream(std::ostream &out) const;
-  /*
-  / TODO: seki 在非常特殊的情況下會搜尋失敗
-  */
-  void find_dame(std::array<territory_t, NUM_VERTICES>& territory);
-  void find_seki(std::array<territory_t, NUM_VERTICES>& territory);
-  void reset_territory(std::array<territory_t, NUM_VERTICES>& territory);
-  std::pair<int, int> find_territory(std::array<territory_t, NUM_VERTICES>& territory);
-  std::pair<int, int> compute_territory();
+  void sgf_stream(std::ostream &out) const;
   
   // Ladder helper
   bool is_neighbor(const int vtx_1, const int vtx_2) const;
@@ -294,6 +286,20 @@ private:
   void merge_strings(const int ip, const int aip);
   int remove_string(const int ip);
   int update_board(const int vtx, const int color);
+  /*
+    =====================================================================
+  */
+
+
+  /*
+  / 領地計算，日式規則
+  / TODO: seki 在非常特殊的情況下會搜尋失敗
+  */
+  void find_dame(std::array<territory_t, NUM_VERTICES> &territory);
+  void find_seki(std::array<territory_t, NUM_VERTICES> &territory);
+  void reset_territory(std::array<territory_t, NUM_VERTICES> &territory);
+  std::pair<int, int> find_territory(std::array<territory_t, NUM_VERTICES> &territory);
+  std::pair<int, int> compute_territory();
   /*
     =====================================================================
   */

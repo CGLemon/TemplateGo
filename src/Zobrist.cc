@@ -25,7 +25,7 @@ bool is_same(std::vector<T> &array, T element) {
 
 void Zobrist::init_zobrist() {
 
-  Random<random_t::XorShiro128Plus> rng(zobrist_seed);
+  Random<random_t::XoroShiro128Plus> rng(zobrist_seed);
 
   auto buf = std::vector<std::uint64_t>{};
   auto count = size_t{0};

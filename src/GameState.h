@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iostream>
 
 #include "Board.h"
 
@@ -43,6 +44,9 @@ public:
   int get_resigned() const;
 
   bool isGameOver() const;
+
+  void result_stream(std::ostream &out);
+  std::string result_to_string();
 private:
   Board::rule_t m_rule{Board::rule_t::Tromp_Taylor};
 

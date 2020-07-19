@@ -48,7 +48,7 @@ struct GTP_Engine {
 
 GTP_Engine *engine = nullptr;
 
-std::string gtp_vertex_parser(int vertex, GameState & state) {
+std::string gtp_vertex_parser(int vertex, GameState &state) {
   assert(cfg_boardsize == state.board.get_boardsize());
   const int max_vertex = (cfg_boardsize+2)*(cfg_boardsize+2);
   if ((vertex >= 0 && vertex < max_vertex) || vertex == Board::PASS || vertex == Board::RESIGN) {
@@ -56,7 +56,7 @@ std::string gtp_vertex_parser(int vertex, GameState & state) {
   } else if (vertex == Board::NO_VERTEX) {
     return std::string{"no-vertex"};
   } 
-  return std::string{"vertex-erro"};
+  return std::string{"vertex-error"};
 }
 
 void gtp::gtp_init_all(int argc, char **argv) {
@@ -294,7 +294,8 @@ bool gtp::gtp_execute(std::string input) {
       state.exchange_to_move();
       state.display();
     }
-    gtp_printf("\n");
+    auto res = state.result_to_string();
+    gtp_printf("%s\n", res.c_str());
   } else {
     return false;
   }

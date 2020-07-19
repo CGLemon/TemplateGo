@@ -56,9 +56,9 @@ size_t Edge::edge_tree_size = 0;
 Edge::Edge(std::shared_ptr<DataBuffer> data) {
 
   m_data = data;
-  m_pointer = UNINFLATED;
-
-  increment_tree_size(sizeof(Edge) + sizeof(std::shared_ptr<Edge>));
+  m_pointer.store(UNINFLATED);
+  increment_tree_size(sizeof(Edge) +
+                      sizeof(std::shared_ptr<Edge>));
 }
 /*
 Edge::Edge(Edge &&n) {
@@ -74,13 +74,17 @@ Edge::Edge(Edge &&n) {
 
 Edge::~Edge() {
   if (is_pointer(m_pointer)) {
-    increment_tree_size(sizeof(Edge) + sizeof(std::shared_ptr<Edge>));
+    increment_tree_size(sizeof(Edge) +
+                        sizeof(std::shared_ptr<Edge>));
     delete read_ptr(m_pointer);
   }
-  decrement_tree_size(sizeof(Edge) + sizeof(std::shared_ptr<Edge>));
+  decrement_tree_size(sizeof(Edge) +
+                      sizeof(std::shared_ptr<Edge>));
 }
 
-void Edge::set_policy(float policy) { m_data->policy = policy; }
+void Edge::set_policy(float policy) { 
+  m_data->policy = policy;
+}
 
 void Edge::increment_tree_size(size_t sz) {
   std::lock_guard<std::mutex> lock(edge_tree_mutex);
@@ -110,21 +114,23 @@ void Edge::inflate() {
     auto new_ponter =
         reinterpret_cast<std::uint64_t>(new UCTNode(m_data)) |
         POINTER;
-    auto ori_ponter = m_pointer.exchange(new_ponter);
+    auto old_ponter = m_pointer.exchange(new_ponter);
     decrement_tree_size(sizeof(Edge) + sizeof(std::shared_ptr<Edge>));
-    assert(is_inflating(ori_ponter));
+    assert(is_inflating(old_ponter));
   }
 }
 
 void Edge::prune_node() {
   inflate();
-  auto n = read_ptr(m_pointer.load());
+  auto v = m_pointer.load();
+  auto n = read_ptr(v);
   n->set_active(false);
 }
 
 void Edge::kill_node() {
   inflate();
-  auto n = read_ptr(m_pointer.load());
+  auto v = m_pointer.load();
+  auto n = read_ptr(v);
   n->invalinode();
 }
 
@@ -293,15 +299,25 @@ float UCTNode::get_raw_evaluation(int color) const {
   return 1.0f - m_raw_black_eval;
 }
 
-int UCTNode::get_visits() const { return m_visits.load(); }
+int UCTNode::get_visits() const {
+  return m_visits.load();
+}
 
-float UCTNode::get_accumulated_evals() const { return m_accumulated_black_evals.load(); }
+float UCTNode::get_accumulated_evals() const {
+  return m_accumulated_black_evals.load();
+}
 
-int UCTNode::get_color() const { return m_color; }
+int UCTNode::get_color() const {
+ return m_color;
+}
 
-int UCTNode::get_vertex() const { return m_data->vertex; }
+int UCTNode::get_vertex() const {
+  return m_data->vertex;
+}
 
-float UCTNode::get_policy() const { return m_data->policy; }
+float UCTNode::get_policy() const {
+  return m_data->policy;
+}
 
 void UCTNode::increment_virtual_loss() { 
   m_virtual_loss += VIRTUAL_LOSS_COUNT;
@@ -315,7 +331,7 @@ void UCTNode::decrement_virtual_loss() {
 
 float UCTNode::get_eval(int color) const {
   int visits = m_visits + m_virtual_loss;
-  assert(visits > 0);
+  assert(visits >= 0);
   float accumulated_evals = get_accumulated_evals();
   if (color == Board::WHITE) {
      accumulated_evals += static_cast<float>(m_virtual_loss);
@@ -405,7 +421,7 @@ void UCTNode::dirichlet_noise(float epsilon, float alpha) {
   auto dirichlet_vector = std::vector<float>{};
   std::gamma_distribution<float> gamma(alpha, 1.0f);
   for (size_t i = 0; i < child_cnt; i++) {
-    float gen = gamma(Random<random_t::XorShiro128Plus>::get_Rng());
+    float gen = gamma(Random<random_t::XoroShiro128Plus>::get_Rng());
     dirichlet_vector.emplace_back(gen);
   }
 
@@ -588,9 +604,12 @@ std::vector<std::pair<float, int>> UCTNode::get_lcb_list(const int color) {
   inflate_all_children();
 
   for (auto & child : m_children) {
+    const auto visits = child->get_visits();
     const auto vertex = child->get_vertex();
     const auto lcb = child->get_node()->get_eval_lcb(color);
-    list.emplace_back(lcb, vertex);
+    if (visits > 0) {
+      list.emplace_back(lcb, vertex);
+    }
   }
 
   std::stable_sort(rbegin(list), rend(list));
@@ -613,6 +632,10 @@ int UCTNode::get_best_move() {
     }
   }
 
+  if (lcblist.empty() && has_children()) {
+     best_move = m_children[0] -> get_vertex();
+  }
+
   assert(best_move != Board::NO_VERTEX);
   return best_move;
 }
@@ -624,10 +647,16 @@ std::vector<std::pair<float, int>> UCTNode::get_winrate_list(const int color) {
 
   inflate_all_children();
   std::vector<std::pair<float, int>> list;
+
+  
+
   for (auto & child : m_children) {
     const auto vertex = child->get_vertex();
-    const auto winrate = child->get_node()->get_eval(color);
-    list.emplace_back(winrate, vertex);
+    const auto visits = child->get_visits();
+    const auto winrate = child->get_eval(color);
+    if (visits > 0) {
+      list.emplace_back(winrate, vertex);
+    }
   }
 
   std::stable_sort(rbegin(list), rend(list));
@@ -683,7 +712,7 @@ void UCT_Information::tree_stats() {
   Utils::auto_printf("Memory used : %0.5f (MiB)\n", (float)memory_size / (1024 * 1024));
 }
 
-void UCT_Information::dump_stats(UCTNode *node, GameState& state) {
+void UCT_Information::dump_stats(GameState &state, UCTNode *node) {
   const auto color = state.board.get_to_move();
   const auto lcblist = node->get_lcb_list(color);
   const auto parentsVisits = static_cast<float>(node->get_visits());
@@ -694,19 +723,20 @@ void UCT_Information::dump_stats(UCTNode *node, GameState& state) {
     
     auto child = node->get_child(vtx);
     const auto visits = child->get_visits();
-    if (visits != 0) {
-      const auto eval = child->get_eval(color);
-      const auto move = state.vertex_to_string(vtx);
-      const auto pv_string = move + " " + pv_to_srting(child, state);
-      const float visit_ratio = static_cast<float>(visits) / parentsVisits;
-      Utils::auto_printf("%4s -> %7d (V: %5.2f%%) (LCB: %5.2f%%) (N: %5.2f%%) PV: %s\n", 
-                          move.c_str(),
-                          visits,
-                          eval * 100.f, 
-                          lcb_value * 100.f,
-                          visit_ratio * 100.f,
-                          pv_string.c_str());
-    }
+    assert(visits != 0);
+    
+    const auto eval = child->get_eval(color);
+    const auto move = state.vertex_to_string(vtx);
+    const auto pv_string = move + " " + pv_to_srting(child, state);
+    const float visit_ratio = static_cast<float>(visits) / parentsVisits;
+    Utils::auto_printf("%4s -> %7d (V: %5.2f%%) (LCB: %5.2f%%) (N: %5.2f%%) PV: %s\n", 
+                        move.c_str(),
+                        visits,
+                        eval * 100.f, 
+                        lcb_value * 100.f,
+                        visit_ratio * 100.f,
+                        pv_string.c_str());
+    
   }
 
   tree_stats();
@@ -769,17 +799,24 @@ bool Heuristic::should_be_resign(GameState &state, UCTNode *node, float threshol
   const int bsize = state.board.get_boardsize();
   const int num_moves = state.board.get_movenum();
   const int color = state.board.get_to_move();
-  if (0.8f * (bsize * bsize) >  num_moves) {
+  assert(color == node->get_color());
+
+  if (0.5f * (bsize * bsize) >  num_moves) {
     return false;
   }
   auto wlist = node->get_winrate_list(color);
+  auto lcblist = node->get_lcb_list(color);
 
+  const size_t size = wlist.size();
+  assert(size == lcblist.size());
 
-  for (auto &w : wlist) {
-    const float winrate = w.first;
-    if (winrate > threshold) {
+  for (auto i = size_t{0}; i < size; ++i) {
+    const float winrate = wlist[i].first;
+    const float lcb = lcblist[i].first;
+    if (winrate > threshold || lcb > threshold) {
       return false;
     } 
   }
+
   return true;
 }
