@@ -94,10 +94,9 @@ endif()
 include_directories(${IncludePath})
 
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/LZ LZ_SRCS)
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/blas CPUBLAS_SRCS)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src DIR_SRCS)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/KataGo KG_SRCS)
-add_executable(TemplateGo ${DIR_SRCS} ${CPUBLAS_SRCS} ${CUDA_SRCS} ${LZ_SRCS} ${KG_SRCS})
+add_executable(TemplateGo ${DIR_SRCS} ${CUDA_SRCS} ${LZ_SRCS} ${KG_SRCS})
 
 target_link_libraries(TemplateGo Threads::Threads)
 target_link_libraries(TemplateGo ${BLAS_LIBRARIES})
