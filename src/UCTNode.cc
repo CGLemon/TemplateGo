@@ -194,6 +194,7 @@ UCTNode::UCTNode(std::shared_ptr<DataBuffer> data) {
 
 UCTNode::~UCTNode() {
   decrement_tree_size(sizeof(UCTNode));
+  assert(m_loading_threads.load() == 0);
 }
 
 bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
@@ -286,7 +287,7 @@ void UCTNode::link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
       data->policy = node.first;
       data->delta = m_delta_loss * cfg_delta_attenuation_ratio;
 
-      m_children.emplace_back(std::make_shared<Edge>(data));
+      m_children.emplace_back(std::move(std::make_shared<Edge>(data)));
     }
   }
   assert(!m_children.empty());
@@ -319,22 +320,33 @@ float UCTNode::get_policy() const {
   return m_data->policy;
 }
 
-void UCTNode::increment_virtual_loss() { 
-  m_virtual_loss += VIRTUAL_LOSS_COUNT;
-  assert(m_virtual_loss >= 0);
+void UCTNode::increment_threads() {
+  m_loading_threads++;
 }
 
-void UCTNode::decrement_virtual_loss() {
-  m_virtual_loss -= VIRTUAL_LOSS_COUNT;
-  assert(m_virtual_loss >= 0);
+void UCTNode::decrement_threads() {
+  m_loading_threads--;
+  assert(m_loading_threads.load() >= 0);
+}
+
+int UCTNode::get_threads() const {
+  return m_loading_threads.load();
+}
+
+int UCTNode::get_virtual_loss() const {
+  const int threads = get_threads();
+  const int virtual_loss = threads * threads * VIRTUAL_LOSS_COUNT;
+ 
+  return virtual_loss;
 }
 
 float UCTNode::get_eval(int color) const {
-  int visits = m_visits + m_virtual_loss;
+  int virtual_loss = get_virtual_loss();
+  int visits = m_visits + virtual_loss;
   assert(visits >= 0);
   float accumulated_evals = get_accumulated_evals();
   if (color == Board::WHITE) {
-     accumulated_evals += static_cast<float>(m_virtual_loss);
+     accumulated_evals += static_cast<float>(virtual_loss);
   }
   float eval = accumulated_evals / static_cast<float>(visits);
   if (color == Board::BLACK) {

@@ -8,13 +8,6 @@
 #include <unordered_map>
 
 #include "config.h"
-#include "LZ/LZNetParameters.h"
-
-struct TAResult {
-  TAResult() : blackscore(0), whitescore(0) {}
-  int blackscore;
-  int whitescore;
-};
 
 struct NNResult {
   NNResult() : policy_pass(0.0f) {
@@ -23,11 +16,12 @@ struct NNResult {
   }
 
   std::array<float, NUM_INTERSECTIONS> policy;
-  std::array<float, LZ::VALUE_LABELS> winrate;
+  std::array<float, 1> winrate;
   float policy_pass;
 };
 
-template <typename EvalResult> class CacheTable {
+template <typename EvalResult>
+class CacheTable {
 public:
   CacheTable(size_t size = MAX_CACHE_COUNT)
       : m_hits(0), m_lookups(0), m_inserts(0) {

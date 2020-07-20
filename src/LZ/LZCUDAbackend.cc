@@ -1,5 +1,4 @@
 #include "LZ/LZCUDAbackend.h"
-#include "blas/CPULayers.h"
 #include "Utils.h"
 #include "cfg.h"
 

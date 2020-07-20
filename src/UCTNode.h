@@ -121,7 +121,7 @@ inline UCTNode *Edge::read_ptr(uint64_t v) const {
   return reinterpret_cast<UCTNode *>(v & ~(POINTER_MASK));
 }
 
-#define VIRTUAL_LOSS_COUNT (3)
+#define VIRTUAL_LOSS_COUNT (2)
 
 class UCTNode {
 public:
@@ -163,8 +163,10 @@ public:
   void dirichlet_noise(float epsilon, float alpha);
   float prepare_root_node(Evaluation &evaluation, GameState &state);
 
-  void increment_virtual_loss();
-  void decrement_virtual_loss();
+  void increment_threads();
+  void decrement_threads();
+  int get_threads() const;
+  int get_virtual_loss() const;
 
   void set_active(const bool active);
   void invalinode();
@@ -180,9 +182,9 @@ public:
 
   float get_eval_lcb(int color) const;
   float get_eval_variance(float default_var) const;
-  std::vector<std::pair<float, int>> get_lcb_list(const int color);
   int get_best_move();
 
+  std::vector<std::pair<float, int>> get_lcb_list(const int color);
   std::vector<std::pair<float, int>> get_winrate_list(const int color);
 
 private:
@@ -198,8 +200,6 @@ private:
   int m_color{Board::EMPTY};
 
   std::atomic<int> m_visits{0}; // 節點訪問的次數
-  //int m_vertex;
-  //float m_policy;
 
   // m_raw_black_eval 黑方的網路輸出勝率
   float m_raw_black_eval{0.0f};
@@ -212,7 +212,8 @@ private:
 
   std::vector<std::shared_ptr<Edge>> m_children;
 
-  std::atomic<int> m_virtual_loss{0};
+  //std::atomic<int> m_virtual_loss{0};
+  std::atomic<int> m_loading_threads{0};
 
   enum class ExpandState : std::uint8_t { 
       INITIAL = 0, 

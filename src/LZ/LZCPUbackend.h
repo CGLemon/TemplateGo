@@ -1,7 +1,9 @@
 #ifndef LZCPUBACKEND_H_INCLUDE
 #define LZCPUBACKEND_H_INCLUDE
 
+#include "Blas.h"
 #include "LZ/LZModel.h"
+
 #include <vector>
 #include <array>
 
@@ -18,6 +20,8 @@ public:
                        std::vector<float> &output_val);
 
 private:
+  static constexpr auto conv_size = BOARD_SIZE;
+
   std::shared_ptr<NNWeights> m_weights;
   int m_residual_channels;
   int m_residual_blocks;

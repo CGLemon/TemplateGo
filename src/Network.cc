@@ -9,7 +9,7 @@
 #include "GameState.h"
 #include "Random.h"
 #include "Utils.h"
-#include "blas/CPULayers.h"
+#include "Blas.h"
 #include "cfg.h"
 #include "config.h"
 
@@ -82,7 +82,7 @@ void Network::initialize(int playouts, const std::string &weightsfile,
 }
 
 
-// TODO: probe_cache 在後期不需要翻轉
+// TODO: probe_cache 翻轉搜尋?
 bool Network::probe_cache(const GameState *const state,
                           Network::Netresult &result) {
   if (m_nncache.lookup(state->board.get_hash(), result)) {

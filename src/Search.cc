@@ -77,14 +77,18 @@ void Search::set_playout(int playouts) {
   m_maxplayouts = m_maxplayouts >= 1 ? m_maxplayouts : 1;
 }
 
-float Search::get_min_psa_ratio() const { return 0.0f; }
+float Search::get_min_psa_ratio() const {
+  return 0.0f;
+}
 
-void Search::increment_playouts() { m_playouts++; }
+void Search::increment_playouts() {
+  m_playouts++;
+}
 
 SearchResult Search::play_simulation(GameState &currstate, UCTNode *const node,
                                      UCTNode *const root_node) {
   auto result = SearchResult{};
-  node->increment_virtual_loss();
+  node->increment_threads();
 
   if (node->expandable()) {
     if (currstate.board.get_passes() >= 2) {
@@ -120,8 +124,7 @@ SearchResult Search::play_simulation(GameState &currstate, UCTNode *const node,
     node->update(result.eval());
   }
 
-  node->decrement_virtual_loss();
-
+  node->decrement_threads();
   return result;
 }
 

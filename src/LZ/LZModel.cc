@@ -1,5 +1,5 @@
 #include "LZ/LZModel.h"
-#include "blas/CPULayers.h"
+#include "Blas.h"
 #include "Winograd_helper.h"
 #include "Utils.h"
 
@@ -438,7 +438,7 @@ NNResult LZModel::get_result(std::vector<float> & policy,
                              const float softmax_temp,
                              const int symmetry) {
   NNResult result;
-  const auto outputs = Activation::softmax(policy, softmax_temp);
+  const auto outputs = Activation::Softmax(policy, softmax_temp);
 
   // Map TanH output range [-1..1] to [0..1] range
   const auto winrate = (1.0f + std::tanh(value[0])) / 2.0f;

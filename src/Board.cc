@@ -766,8 +766,10 @@ bool Board::is_legal(const int vtx, const int color,
     return false;
   }
 
-  if (!cfg_allowed_suicide && is_suicide(vtx, color)) {
-    return false;
+  if (is_suicide(vtx, color)) {
+    if (!cfg_allowed_suicide) {
+      return false;
+    }
   }
 
   if (vtx == m_komove) {
