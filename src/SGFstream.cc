@@ -4,24 +4,21 @@
 
 #include <sstream>
 #include <fstream>
+#include <iomanip>
 
-void SGFstream::save_sgf(std::string filename, GameState &state) {
-  auto winner = state.get_winner();
-  float score = -1;
-  if (state.board.get_passes() >= 2) {
-    score = state.final_score();
-    if (winner == Board::WHITE) {
-      score = (-score);
-    }
-    assert(score >= 0);
-  }
+void SGFstream::save_sgf(std::string filename, GameState &state, bool append) {
 
   std::ostringstream out;
-  sgf_stream(out, state, winner, score);
+  sgf_stream(out, state);
   
-  std::ofstream sgf;
+  std::fstream sgf;
+  auto ios_tag = std::ios::out;
+  if (append) {
+    ios_tag |= std::ios::app;
+  }
 
-  sgf.open(filename);
+  sgf.open(filename, ios_tag);
+
   if (sgf.is_open()) {
     sgf << out.str();
   } else {
@@ -30,10 +27,7 @@ void SGFstream::save_sgf(std::string filename, GameState &state) {
   sgf.close();
 }
 
-
-
-void SGFstream::sgf_stream(std::ostream &out, 
-                           GameState &state, int winner, float score) {
+void SGFstream::sgf_stream(std::ostream &out, GameState &state) {
 
   auto ruleToString = [=](Board::rule_t rule){
     if (rule == Board::rule_t::Tromp_Taylor) {
@@ -45,6 +39,15 @@ void SGFstream::sgf_stream(std::ostream &out,
     }
   };
 
+  auto winner = state.get_winner();
+  float score = -1;
+  if (state.board.get_passes() >= 2) {
+    score = state.final_score();
+    if (winner == Board::WHITE) {
+      score = (-score);
+    }
+    assert(score >= 0);
+  }
 
   out << "(";
   out << ";";
@@ -57,23 +60,19 @@ void SGFstream::sgf_stream(std::ostream &out,
     assert(score == 0);
   }
   else if (winner != Board::INVAL) {
-    auto win = std::string{};
-    auto res  = std::string{};
+    out << "RE[";
     if (winner == Board::BLACK) {
-      win = "B+";
+      out << "B+";
     } else if (winner == Board::WHITE) {
-      win = "W+";
+      out << "W+";
     } else {
-      win = "Error";
+      out << "Error";
     }
     if (score < 0.f) {
-      res = "Resign";
+      out << "Resign";
     } else {
-      res = std::to_string(score);
+      out << std::setw(2) << score;
     }
-
-    out << "RE[";
-    out << win << res;
     out << "]";
   }
 

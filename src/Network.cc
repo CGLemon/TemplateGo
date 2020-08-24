@@ -5,6 +5,7 @@
 #include "zlib.h"
 #endif
 
+#include "CPUbackend.h"
 #include "Board.h"
 #include "GameState.h"
 #include "Random.h"
@@ -14,7 +15,7 @@
 #include "config.h"
 
 #ifdef USE_CUDA
-#include "LZ/LZCUDAbackend.h"
+#include "CUDAbackend.h"
 #endif
 
 #ifdef USE_EIGEN
@@ -38,8 +39,7 @@
 
 using namespace Utils;
 
-void Network::initialize(int playouts, const std::string &weightsfile,
-                         Networkfile_t file_type) {
+void Network::initialize(int playouts, const std::string &weightsfile) {
 
 #ifndef __APPLE__
 #ifdef USE_OPENBLAS
@@ -64,23 +64,41 @@ void Network::initialize(int playouts, const std::string &weightsfile,
   m_nncache.resize(cache_size);
 
 #ifdef USE_CUDA
-  using backend = LZ::CUDAbackend;
+  using backend = CUDAbackend;
 #else
-  using backend = LZ::CPUbackend;
+  using backend = CPUbackend;
 #endif
 
-  using NNweights = LZ::LZModel::ForwardPipeWeights;
 
-  m_lz_weights = std::make_shared<NNweights>();
-  m_lz_forward = std::make_unique<backend>();
+  m_weights = std::make_shared<Model::NNweights>();
+  Model::loader(weightsfile, m_weights);
 
-  LZ::LZModel::loader(weightsfile, m_lz_weights);
-  m_lz_forward->initialize(m_lz_weights);
-  static_printf("Weights are pushed down\n");
+  m_forward = std::make_unique<backend>();
+  m_forward->initialize(m_weights);
 
-  m_lz_weights.reset();
+  if (m_weights->loaded) {
+    auto_printf("Weights are pushed down\n");
+  }
+
+  m_weights.reset();
+  m_weights = nullptr;
 }
 
+void Network::reload_weights(const std::string &weightsfile) {
+  if (m_weights != nullptr) {
+    return;
+  }
+  m_weights = std::make_shared<Model::NNweights>();
+  Model::loader(weightsfile, m_weights);
+
+  m_forward->reload(m_weights);
+
+  if (m_weights->loaded) {
+    auto_printf("Weights are pushed down\n");
+  }
+  m_weights.reset();
+  m_weights = nullptr;
+}
 
 // TODO: probe_cache 翻轉搜尋?
 bool Network::probe_cache(const GameState *const state,
@@ -126,14 +144,25 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
                                                 const int symmetry) {
   assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
 
+  auto policy_out = std::vector<float>(POTENTIAL_MOVES);
+  auto finalscore_out = std::vector<float>(OUTPUTS_FINALSCORE * NUM_INTERSECTIONS);
+  auto ownership_out = std::vector<float>(OUTPUTS_OWNERSHIP * NUM_INTERSECTIONS);
+  auto winrate_out = std::vector<float>(VALUE_LABELS);
 
-  std::vector<float> policy_out(LZ::POTENTIAL_MOVES);
-  std::vector<float> winrate_out(LZ::VALUE_LABELS);
 
+  const auto boardsize = state->board.get_boardsize();
+  const auto input_planes = Model::gather_planes(state, symmetry);
+  const auto input_features = Model::gather_features(state);
 
-  const auto input_data = LZ::LZModel::gather_features(state, symmetry);
-  m_lz_forward->forward(input_data, policy_out, winrate_out);
-  const auto result = LZ::LZModel::get_result(policy_out, winrate_out, cfg_softmax_temp, symmetry);
+  m_forward->forward(boardsize, input_planes, input_features,
+                     policy_out, finalscore_out, ownership_out, winrate_out);
+
+  const auto result = Model::get_result(state,
+                                        policy_out,
+                                        finalscore_out,
+                                        ownership_out,
+                                        winrate_out,
+                                        cfg_softmax_temp, symmetry);
 
   return result;
 }
@@ -141,23 +170,25 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
 Network::Netresult
 Network::get_output(const GameState *const state, const Ensemble ensemble,
                     const int symmetry, const bool read_cache,
-                    const bool write_cache, const bool force_selfcheck) {
+                    const bool write_cache) {
   Netresult result;
-
-  if (state->board.get_boardsize() != BOARD_SIZE) {
-    return result;
-  }
+  //const size_t boardsize = state->board.get_boardsize();
+  //const size_t intersections = boardsize * boardsize;
 
   if (read_cache) {
     if (probe_cache(state, result)) {
       return result;
     }
   }
-
-  if (ensemble == DIRECT) {
+  if (ensemble == NONE) {
+    assert(symmetry == -1);
+    result = get_output_internal(state, IDENTITY_SYMMETRY);
+  } else if (ensemble == DIRECT) {
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
     result = get_output_internal(state, symmetry);
-  } else if (ensemble == AVERAGE) {
+  } 
+/*
+  else if (ensemble == AVERAGE) {
     assert(symmetry == -1);
     for (int sym = 0; sym < NUM_SYMMETRIES; ++sym) {
       auto tmpresult = get_output_internal(state, sym);
@@ -166,12 +197,14 @@ Network::get_output(const GameState *const state, const Ensemble ensemble,
       result.policy_pass +=
           tmpresult.policy_pass / static_cast<float>(NUM_SYMMETRIES);
 
-      for (auto idx = size_t{0}; idx < NUM_INTERSECTIONS; idx++) {
+      for (auto idx = size_t{0}; idx < intersections; idx++) {
         result.policy[idx] +=
             tmpresult.policy[idx] / static_cast<float>(NUM_SYMMETRIES);
       }
     }
-  } else {
+  } 
+*/
+  else {
     assert(ensemble == RANDOM_SYMMETRY);
     assert(symmetry == -1);
     auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
@@ -184,4 +217,12 @@ Network::get_output(const GameState *const state, const Ensemble ensemble,
     m_nncache.insert(state->board.get_hash(), result);
   }
   return result;
+}
+
+void Network::release_nn() {
+  m_forward.release();
+}
+
+void Network::clear_cache() {
+  m_nncache.clear();
 }

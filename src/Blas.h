@@ -64,35 +64,64 @@ public:
 
 };
 
-
-class MatMulLayer {
+template<int CONV_SIZE>
+class InputPool {
 public:
-  MatMulLayer() = delete;
-  static void Forward(const size_t input_channels,
-                      const size_t output_channels,
+  InputPool() = delete;
+  static void Forward(const size_t input_size,
+                      const size_t channels,
                       const std::vector<float> &input,
-                      const std::vector<float> &weights,
+                      const std::vector<float> &weights_w,
+                      const std::vector<float> &weights_b,
                       std::vector<float> &output);
+
+private:
+  static constexpr auto width = CONV_SIZE;
+  static constexpr auto height = CONV_SIZE;
+  static constexpr auto spatial_size = width * height;
 
 };
 
 
-template<int conv_size>
-class InflateGlobalPool {
+template<int CONV_SIZE>
+class GlobalAvgPool {
 public:
-  InflateGlobalPool() = delete;
+  GlobalAvgPool() = delete;
   static void Forward(const size_t input_channels,
-                      const size_t output_channels,
                       const std::vector<float> &input,
                       std::vector<float> &output);
 
 private:
-  static constexpr auto center_bsize = 14.f;
-  static constexpr auto width = conv_size;
-  static constexpr auto height = conv_size;
+  static constexpr auto width = CONV_SIZE;
+  static constexpr auto height = CONV_SIZE;
   static constexpr auto spatial_size = width * height;
+
 };
 
+template<int CONV_SIZE>
+class SEUnit {
+public:
+  SEUnit() = delete;
+  static void Forward(const size_t channels,
+                      const size_t se_size,
+                      std::vector<float> &input,
+                      const std::vector<float> &residual,
+                      const std::vector<float> &weights_w1,
+                      const std::vector<float> &weights_b1,
+                      const std::vector<float> &weights_w2,
+                      const std::vector<float> &weights_b2);
+
+private:
+  static void SEProcess(const size_t channels,
+                        std::vector<float> &input,
+                        const std::vector<float> &residual,
+                        const std::vector<float> &scale);
+
+  static constexpr auto width = CONV_SIZE;
+  static constexpr auto height = CONV_SIZE;
+  static constexpr auto spatial_size = width * height;
+
+};
 
 
 
@@ -101,11 +130,13 @@ public:
   static std::vector<float> Softmax(const std::vector<float> &input,
                                     const float temperature = 1.0f);
 
-  static  std::vector<float> Tanh (const std::vector<float> &input);
+  static std::vector<float> Tanh(const std::vector<float> &input);
+
+  static std::vector<float> Sigmoid(const std::vector<float> &input);
 };
 
 
-template<int conv_size>
+template<int CONV_SIZE>
 class Convolve1 {
 public:
   Convolve1() = delete;
@@ -116,13 +147,13 @@ public:
                       std::vector<float> &output);
 
 private:
-  static constexpr auto width = conv_size;
-  static constexpr auto height = conv_size;
+  static constexpr auto width = CONV_SIZE;
+  static constexpr auto height = CONV_SIZE;
   static constexpr auto spatial_size = width * height;
 };
 
 
-template<int conv_size>
+template<int CONV_SIZE>
 class Batchnorm {
 public:
   Batchnorm() = delete;
@@ -130,16 +161,17 @@ public:
                       std::vector<float> &input,
                       const std::vector<float> &means,
                       const std::vector<float> &stddevs,
-                      const float *const eltwise = nullptr);
+                      const float *const eltwise = nullptr,
+                      const bool ReLU = true);
 
 private:
-  static constexpr auto width = conv_size;
-  static constexpr auto height = conv_size;
+  static constexpr auto width = CONV_SIZE;
+  static constexpr auto height = CONV_SIZE;
   static constexpr auto spatial_size = width * height;
 };
 
 
-template<int conv_size>
+template<int CONV_SIZE>
 class winograd_convolve3 {
 public:
   winograd_convolve3() = delete;
@@ -167,15 +199,16 @@ private:
   static void transform_out(const std::vector<float> &M,
                             std::vector<float> &Y,
                             const int K);
-
+  static constexpr auto WINOGRAD_WTILES = (CONV_SIZE / WINOGRAD_M + (CONV_SIZE % WINOGRAD_M != 0));
   static constexpr auto WTILES = WINOGRAD_WTILES;
-  static constexpr auto W = conv_size;
-  static constexpr auto H = conv_size;
+  static constexpr auto WINOGRAD_P = WINOGRAD_WTILES * WINOGRAD_WTILES;
+  static constexpr auto W = CONV_SIZE;
+  static constexpr auto H = CONV_SIZE;
   static constexpr auto filter_len = WINOGRAD_ALPHA * WINOGRAD_ALPHA;
 };
 
 
-template<int conv_size>
+template<int CONV_SIZE>
 class Convolve {
 public:
   Convolve() = delete;
@@ -196,9 +229,9 @@ private:
                      const std::vector<float> &input,
                      std::vector<float> &col);
 
-  static constexpr int width = conv_size;
-  static constexpr int height = conv_size;
-  static constexpr int spatial_size = width * height;
+  static constexpr auto width = CONV_SIZE;
+  static constexpr auto height = CONV_SIZE;
+  static constexpr auto spatial_size = width * height;
 };
 
 class FullyConnect {
@@ -219,8 +252,8 @@ public:
                                          bool ReLU);
 };
 
-template<int conv_size>
-void winograd_convolve3<conv_size>::transform_in(const std::vector<float> &in,
+template<int CONV_SIZE>
+void winograd_convolve3<CONV_SIZE>::transform_in(const std::vector<float> &in,
                                                  std::vector<float> &V, const int C) {
 
   constexpr int P = WINOGRAD_P;
@@ -331,8 +364,8 @@ void winograd_convolve3<conv_size>::transform_in(const std::vector<float> &in,
   }
 }
 
-template<int conv_size>
-void winograd_convolve3<conv_size>::sgemm(const std::vector<float> &U,
+template<int CONV_SIZE>
+void winograd_convolve3<CONV_SIZE>::sgemm(const std::vector<float> &U,
                                           const std::vector<float> &V,
                                           std::vector<float> &M, const int C,
                                           const int K) {
@@ -360,8 +393,8 @@ void winograd_convolve3<conv_size>::sgemm(const std::vector<float> &U,
   }
 }
 
-template<int conv_size>
-void winograd_convolve3<conv_size>::transform_out(const std::vector<float> &M,
+template<int CONV_SIZE>
+void winograd_convolve3<CONV_SIZE>::transform_out(const std::vector<float> &M,
                                                   std::vector<float> &Y, const int K) {
   constexpr auto P = WINOGRAD_P;
 
@@ -428,8 +461,8 @@ void winograd_convolve3<conv_size>::transform_out(const std::vector<float> &M,
   }
 }
 
-template<int conv_size>
-void winograd_convolve3<conv_size>::Forward(const size_t input_channels,
+template<int CONV_SIZE>
+void winograd_convolve3<CONV_SIZE>::Forward(const size_t input_channels,
                                             const size_t output_channels,
                                             const std::vector<float> &input,
                                             const std::vector<float> &U,
@@ -443,8 +476,8 @@ void winograd_convolve3<conv_size>::Forward(const size_t input_channels,
 }
 
 
-template<int conv_size>
-std::pair<size_t, size_t> winograd_convolve3<conv_size>::get_workspace_size(const size_t input_channels,
+template<int CONV_SIZE>
+std::pair<size_t, size_t> winograd_convolve3<CONV_SIZE>::get_workspace_size(const size_t input_channels,
                                                                             const size_t output_channels) {
 
   auto winograd_V_size = WINOGRAD_TILE * input_channels * WINOGRAD_P;
@@ -452,8 +485,8 @@ std::pair<size_t, size_t> winograd_convolve3<conv_size>::get_workspace_size(cons
   return {winograd_V_size, winograd_M_size};
 }
 
-template<int conv_size>
-void Convolve1<conv_size>::Forward(const size_t input_channels,
+template<int CONV_SIZE>
+void Convolve1<CONV_SIZE>::Forward(const size_t input_channels,
                                    const size_t output_channels,
                                    const std::vector<float> &input,
                                    const std::vector<float> &weights,
@@ -472,40 +505,52 @@ void Convolve1<conv_size>::Forward(const size_t input_channels,
                      spatial_size);
 }
 
-template<int conv_size>
-void Batchnorm<conv_size>::Forward(const size_t channels,
+template<int CONV_SIZE>
+void Batchnorm<CONV_SIZE>::Forward(const size_t channels,
                                    std::vector<float> &input,
                                    const std::vector<float> &means,
                                    const std::vector<float> &stddevs,
-                                   const float *const eltwise) {
-  const auto lambda_ReLU = [=](const auto val) {
-    return (val > 0.0f) ? val : 0.0f;
+                                   const float *const eltwise,
+                                   const bool ReLU) {
+
+  const auto lambda_ReLU = [&](const auto val) {
+    return (val > 0.0f || (!ReLU)) ? val : 0.0f;
   };
 
   float *input_ptr = input.data();
   const float *res = eltwise;
+  if (eltwise) {
+    for (auto c = size_t{0}; c < channels; ++c) {
+      const auto mean = means[c];
+      const auto scale_stddev = stddevs[c];
 
-  for (auto c = size_t{0}; c < channels; ++c) {
-    const auto mean = means[c];
-    const auto scale_stddev = stddevs[c];
+      for (auto b = size_t{0}; b < spatial_size; b++) {
+        float value = *input_ptr;
+        value = scale_stddev * (value - mean) + *res;
+        *input_ptr = lambda_ReLU(value);
 
-
-    for (auto b = size_t{0}; b < spatial_size; b++) {
-      float value = *input_ptr;
-      value = scale_stddev * (value - mean);
-      if (eltwise) {
-        value += *res;
+        input_ptr++;
         res++;
       }
-      *input_ptr = lambda_ReLU(value);
-      input_ptr++;
+    }
+  } else {
+    for (auto c = size_t{0}; c < channels; ++c) {
+      const auto mean = means[c];
+      const auto scale_stddev = stddevs[c];
+
+      for (auto b = size_t{0}; b < spatial_size; b++) {
+        float value = *input_ptr;
+        value = scale_stddev * (value - mean);
+        *input_ptr = lambda_ReLU(value);
+        input_ptr++;
+      }
     }
   }
 }
 
 
-template<int conv_size>
-void Convolve<conv_size>::im2col(const size_t filter_size,
+template<int CONV_SIZE>
+void Convolve<CONV_SIZE>::im2col(const size_t filter_size,
                                  const int channels,
                                  const std::vector<float> &input,
                                  std::vector<float> &output) {
@@ -546,8 +591,8 @@ void Convolve<conv_size>::im2col(const size_t filter_size,
 }
 
 
-template<int conv_size>
-void Convolve<conv_size>::Forward(const size_t filter_size,
+template<int CONV_SIZE>
+void Convolve<CONV_SIZE>::Forward(const size_t filter_size,
                                   const size_t input_channels,
                                   const size_t output_channels,
                                   const std::vector<float> &input,
@@ -586,12 +631,116 @@ void Convolve<conv_size>::Forward(const size_t filter_size,
 
 }
 
-template<int conv_size>
-size_t Convolve<conv_size>::get_workspace_size(const size_t filter_size,
+template<int CONV_SIZE>
+size_t Convolve<CONV_SIZE>::get_workspace_size(const size_t filter_size,
                                                const size_t input_channels) {
 
   const size_t filter_len = filter_size * filter_size;
   const size_t filter_dim = filter_len * input_channels;
   return filter_dim * width * height;
+}
+
+template<int CONV_SIZE>
+void GlobalAvgPool<CONV_SIZE>::Forward(const size_t channels,
+                                    const std::vector<float> &input,
+                                    std::vector<float> &output) {
+
+  const float *input_ptr = input.data();
+
+  for (auto c = size_t{0}; c < channels; ++c) {
+    float Sum = 0.0f;
+    for (auto b = size_t{0}; b < spatial_size; ++b) {
+      Sum += *input_ptr;
+      input_ptr++;
+    }
+
+    const float Mean = Sum / (float)spatial_size;
+    output[c] = Mean;
+  }
+}
+
+template<int CONV_SIZE>
+void SEUnit<CONV_SIZE>::Forward(const size_t channels,
+                                const size_t se_size,
+                                std::vector<float> &input,
+                                const std::vector<float> &residual,
+                                const std::vector<float> &weights_w1,
+                                const std::vector<float> &weights_b1,
+                                const std::vector<float> &weights_w2,
+                                const std::vector<float> &weights_b2) {
+
+  using pooling = GlobalAvgPool<CONV_SIZE>;
+  auto pool = std::vector<float>(2 * channels);
+  auto fc_out = std::vector<float>(se_size);
+
+  pooling::Forward(channels, input, pool);
+  FullyConnect::Forward(channels, se_size, pool, weights_w1, weights_b1, fc_out, true);
+  FullyConnect::Forward(se_size, 2*channels, fc_out, weights_w2, weights_b2, pool, false);
+
+  SEProcess(channels, input, residual, pool);
+}
+
+template<int CONV_SIZE>
+void SEUnit<CONV_SIZE>::SEProcess(const size_t channels,
+                                  std::vector<float> &input,
+                                  const std::vector<float> &residual,
+                                  const std::vector<float> &scale) {
+
+  const auto lambda_ReLU = [](const auto val) {
+    return (val > 0.0f) ? val : 0;
+  };
+
+  const auto lambda_sigmoid = [](const auto val) {
+    return 1.0f / (1.0f + std::exp(-val));
+  };
+
+  auto gamma_ptr = scale.data();
+  auto beta_ptr = scale.data() + channels;
+  auto input_ptr = input.data();
+  auto res_ptr = residual.data();
+
+
+  for (auto c = size_t{0}; c < channels; ++c) {
+    const auto gamma = lambda_sigmoid(*gamma_ptr);
+    const auto beta = *beta_ptr;
+
+    gamma_ptr++;
+    beta_ptr++;
+
+    for (auto i = size_t{0}; i < spatial_size; ++i) {
+      float value = *input_ptr;
+      *input_ptr = lambda_ReLU(gamma * value + beta + *res_ptr);
+      input_ptr++;
+      res_ptr++;
+    }
+  }
+}
+
+template<int CONV_SIZE>
+void InputPool<CONV_SIZE>::Forward(const size_t input_size,
+                                   const size_t channels,
+                                   const std::vector<float> &input,
+                                   const std::vector<float> &weights_w,
+                                   const std::vector<float> &weights_b,
+                                   std::vector<float> &output) {
+  auto fc_out = std::vector<float>(channels);
+  FullyConnect::Forward(input_size, channels,
+      input, weights_w, weights_b, fc_out, false);
+
+
+  const auto lambda_ReLU = [](const auto val) {
+    return (val > 0.0f) ? val : 0;
+  };
+
+  auto output_ptr = output.data();
+
+  for (auto c = size_t{0}; c < channels; ++c) {
+    float bais = fc_out[c];
+    for (auto i = size_t{0}; i < spatial_size; ++i) {
+      float value = *output_ptr;
+      *output_ptr = lambda_ReLU(value + bais);
+      output_ptr++;
+    }
+  }
 }
 #endif

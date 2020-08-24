@@ -17,6 +17,7 @@ constexpr int Board::PASS;
 constexpr int Board::NO_VERTEX;
 constexpr int Board::NUM_SYMMETRIES;
 constexpr int Board::IDENTITY_SYMMETRY;
+constexpr int Board::s_eyemask[2];
 
 std::array<std::array<int, NUM_INTERSECTIONS>, Board::NUM_SYMMETRIES>
     Board::symmetry_nn_idx_table;
@@ -161,8 +162,11 @@ std::pair<int, int> Board::get_symmetry(const int x, const int y,
 
 void Board::init_symmetry_table(const int boardsize) {
   for (int sym = 0; sym < NUM_SYMMETRIES; ++sym) {
-    for (int vtx = 0; vtx < m_numvertices; ++vtx) {
+    for (int vtx = 0; vtx < NUM_VERTICES; ++vtx) {
       symmetry_nn_vtx_table[sym][vtx] = 0;
+    }
+    for (int idx = 0; idx < NUM_INTERSECTIONS; ++idx) {
+      symmetry_nn_idx_table[sym][idx] = 0;
     }
   }
 
@@ -679,7 +683,7 @@ int Board::update_board(const int vtx, const int color) {
   bool is_eyeplay = is_simple_eye(vtx, !color);
 
   int captured_stones = 0;
-  int captured_vtx;
+  int captured_vtx = NO_VERTEX;
 
   for (int k = 0; k < 4; ++k) {
     const int avtx = vtx + m_dirs[k];
@@ -728,10 +732,13 @@ int Board::update_board(const int vtx, const int color) {
   return NO_VERTEX;
 }
 
-void Board::play_move(const int vtx) { play_move(vtx, m_tomove); }
+void Board::play_move(const int vtx) {
+  play_move(vtx, m_tomove);
+}
 
 void Board::play_move(const int vtx, const int color) {
   assert(vtx != Board::RESIGN);
+  set_to_move(color);
   const int ori_komove = m_komove;
   if (vtx == PASS) {
     increment_passes();
@@ -748,6 +755,8 @@ void Board::play_move(const int vtx, const int color) {
   }
   m_lastmove = vtx;
   m_movenum++;
+
+  exchange_to_move();
 }
 
 bool Board::is_legal(const int vtx, const int color,
@@ -820,7 +829,7 @@ int Board::calc_reach_color(int color, int spread_color,
 
     for (int k = 0; k < 4; ++k) {
       const int neighbor = vertex + m_dirs[k];
-      const int peek = f_peek(vertex);
+      const int peek = f_peek(neighbor);
 
       if (!buf[neighbor] && peek == spread_color) {
         reachable++;
@@ -832,23 +841,29 @@ int Board::calc_reach_color(int color, int spread_color,
   return reachable;
 }
 
-float Board::area_score(float komi, Board::rule_t rule) {
+float Board::area_score(float komi, Board::rule_t rule) const {
   if (rule == rule_t::Tromp_Taylor) {
-    float white = static_cast<float>(calc_reach_color(WHITE));
-    float black = static_cast<float>(calc_reach_color(BLACK));
-    return black - white - komi;
+    int white = calc_reach_color(WHITE);
+    int black = calc_reach_color(BLACK);
+    return static_cast<float>(black - white) - komi;
   } else if (rule == rule_t::Jappanese) {
     auto terri = compute_territory();
-    float white = static_cast<float>(terri.second + m_prisoners[WHITE]);
-    float black = static_cast<float>(terri.first + m_prisoners[BLACK]);
+    int white = terri.second + m_prisoners[WHITE];
+    int black = terri.first + m_prisoners[BLACK];
 
-    return black - white - komi;
+    return static_cast<float>(black - white) - komi;
   }
 
   return 0.0f;
 }
 
-void Board::find_dame(std::array<territory_t, NUM_VERTICES> &territory) {
+int Board::area_distance() const {
+  const int white = calc_reach_color(WHITE);
+  const int black = calc_reach_color(BLACK);
+  return black - white;
+}
+
+void Board::find_dame(std::array<territory_t, NUM_VERTICES> &territory) const {
   auto black = std::vector<bool>(m_numvertices, false);
   auto white = std::vector<bool>(m_numvertices, false);
 
@@ -869,7 +884,7 @@ void Board::find_dame(std::array<territory_t, NUM_VERTICES> &territory) {
   }
 }
 
-void Board::find_seki(std::array<territory_t, NUM_VERTICES> &territory) {
+void Board::find_seki(std::array<territory_t, NUM_VERTICES> &territory) const {
   auto black_seki = std::vector<bool>(m_numvertices, false);
   auto white_seki = std::vector<bool>(m_numvertices, false);
 
@@ -891,7 +906,7 @@ void Board::find_seki(std::array<territory_t, NUM_VERTICES> &territory) {
   }
 }
 
-std::pair<int, int> Board::find_territory(std::array<territory_t, NUM_VERTICES> &territory) {
+std::pair<int, int> Board::find_territory(std::array<territory_t, NUM_VERTICES> &territory) const {
   int b_terr_count = 0;
   int w_terr_count = 0;
 
@@ -923,7 +938,7 @@ std::pair<int, int> Board::find_territory(std::array<territory_t, NUM_VERTICES> 
   return std::make_pair(b_terr_count, w_terr_count);
 }
 
-std::pair<int, int> Board::compute_territory() {
+std::pair<int, int> Board::compute_territory() const {
 
   auto territory = std::array<territory_t, NUM_VERTICES>{};
   reset_territory(territory);
@@ -932,7 +947,7 @@ std::pair<int, int> Board::compute_territory() {
   return find_territory(territory);
 }
 
-void Board::reset_territory(std::array<territory_t, NUM_VERTICES> &territory) {
+void Board::reset_territory(std::array<territory_t, NUM_VERTICES> &territory) const {
   for (int vtx = 0; vtx < m_numvertices; ++vtx) {
     switch (m_state[vtx]) {
     case BLACK:
@@ -980,6 +995,10 @@ int Board::get_boardsize() const {
   return m_boardsize;
 }
 
+int Board::get_intersections() const {
+  return m_intersections;
+}
+
 float Board::get_komi() const {
   return m_komi_float + static_cast<float>(m_komi_integer);
 }
@@ -1021,6 +1040,39 @@ int Board::get_libs(const int vtx) const {
   const int parent = m_string.parent[vtx];
   return m_string.libs[parent];
 }
+
+std::vector<int> Board::get_ownership() const {
+  auto res = std::vector<int>(m_intersections, INVAL);
+
+  auto black = std::vector<bool>(m_numvertices, false);
+  auto white = std::vector<bool>(m_numvertices, false);
+  auto peekState = [&] (int vtx) {
+    return m_state[vtx];
+  };
+
+  const auto black_reachable =
+      calc_reach_color(BLACK, EMPTY, black, peekState);
+
+  const auto white_reachable =
+      calc_reach_color(WHITE, EMPTY, white, peekState);
+
+  for (int y = 0; y < m_boardsize; ++y) {
+    for (int x = 0; x < m_boardsize; ++x) {
+      const auto idx = get_index(x, y);
+      const auto vtx = get_vertex(x, y);
+      if (black[vtx] && white[vtx] || !black[vtx] && !white[vtx]) {
+        res[idx] = EMPTY;
+      } else if (black[vtx]) {
+        res[idx] = BLACK;  
+      } else if (white[vtx]) {
+        res[idx] = WHITE;
+      }
+    }
+  }
+
+  return res;
+}
+
 
 void Board::vertex_stream(std::ostream &out, int vertex) const {
   assert(vertex != NO_VERTEX);
@@ -1087,7 +1139,7 @@ void Board::sgf_stream(std::ostream &out,
 }
 
 void Board::sgf_stream(std::ostream &out) const {
-  sgf_stream(out, m_lastmove, m_tomove);
+  sgf_stream(out, m_lastmove, !(m_tomove));
 }
 
 int Board::find_liberties(const int vtx,
@@ -1188,10 +1240,10 @@ std::pair<int, int> Board::get_libs_for_ladder(const int vtx, const int color) c
       }
     }
   }
-  const int lower_bound 
-                = num_caps + (max_connection_libs > stone_libs ? max_connection_libs : stone_libs); 
-  const int upper_bound
-                = stone_libs + potential_libs_from_Caps + num_connection_libs;
+  const int lower_bound =
+      num_caps + (max_connection_libs > stone_libs ? max_connection_libs : stone_libs); 
+  const int upper_bound = 
+      stone_libs + potential_libs_from_Caps + num_connection_libs;
 
   return {lower_bound, upper_bound};
 }
@@ -1358,7 +1410,7 @@ Board::ladder_t Board::hunter_move(std::shared_ptr<Board> board,
 
     assert(next_res != ladder_t::GOOD_FOR_NONE);
 
-    best  = next_res;
+    best = next_res;
     if (next_res == ladder_t::GOOD_FOR_HUNTER) {
       break;
     }
@@ -1456,7 +1508,7 @@ bool Board::is_ladder(const int vtx) const {
                     ladder_parent, ladder_nodes, false);
   }
 
-  if (res == ladder_t::GOOD_FOR_NONE || res  == ladder_t::GOOD_FOR_PREY) {
+  if (res == ladder_t::GOOD_FOR_NONE || res == ladder_t::GOOD_FOR_PREY) {
     return false;
   }
   assert(res == ladder_t::GOOD_FOR_HUNTER);

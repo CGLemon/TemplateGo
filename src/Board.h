@@ -27,7 +27,6 @@
 #define BLACK_EYE_MASK (4 * (1 << BLACK_NBR_SHIFT))
 #define WHITE_EYE_MASK (4 * (1 << WHITE_NBR_SHIFT))
 
-static std::array<int, 2> s_eyemask = {BLACK_EYE_MASK, WHITE_EYE_MASK};
 static_assert(sizeof(std::uint64_t) == 8, "");
 /*
 / TODO: 增加征子的判斷（ 為了支援 KataGo ）
@@ -69,6 +68,7 @@ public:
       B_TERR = 8
   };
 
+  static constexpr int NO_INDEX = NUM_INTERSECTIONS+1;
 
   static constexpr int NO_VERTEX = 0;
 
@@ -79,6 +79,8 @@ public:
   static constexpr int NUM_SYMMETRIES = 8;
 
   static constexpr int IDENTITY_SYMMETRY = 0;
+
+  static constexpr int s_eyemask[2] = {BLACK_EYE_MASK, WHITE_EYE_MASK};
 
   static std::array<std::array<int, NUM_INTERSECTIONS>, NUM_SYMMETRIES> symmetry_nn_idx_table;
 
@@ -92,7 +94,6 @@ public:
   void reset_board_data();
 
   void set_to_move(int color);
-  void exchange_to_move();
 
   /*
   / =====================================================================
@@ -127,8 +128,9 @@ public:
   int get_vertex(const int x, const int y) const;
   int get_index(const int x, const int y) const;
   vertex_t get_state(const int vtx) const;
-  vertex_t get_state(int x, int y) const;
+  vertex_t get_state(const int x, const int y) const;
   int get_boardsize() const;
+  int get_intersections() const;
   int get_transform_idx(const int idx, const int sym = IDENTITY_SYMMETRY) const;
   int get_transform_vtx(const int vtx, const int sym = IDENTITY_SYMMETRY) const;
   int get_passes() const;
@@ -138,6 +140,8 @@ public:
   int get_libs(const int x, const int y) const;
   int get_libs(const int vtx) const;
   int get_komove() const;
+
+  std::vector<int> get_ownership() const;
 
   std::uint64_t get_ko_hash() const;
   std::uint64_t get_hash() const;
@@ -150,7 +154,6 @@ public:
 
   void set_passes(int val);
   void increment_passes();
-
 
   int get_x(const int vtx) const;
   int get_y(const int vtx) const;
@@ -173,7 +176,8 @@ public:
   int calc_reach_color(int color) const;
   int calc_reach_color(int color, int spread_color,
                        std::vector<bool>& bd, std::function<int(int)> f_peek) const;
-  float area_score(float komi, rule_t = rule_t::Tromp_Taylor);
+  float area_score(float komi, rule_t = rule_t::Tromp_Taylor) const;
+  int area_distance() const;
 
   std::string vertex_to_string(int vertex) const;
   void vertex_stream(std::ostream &out, const int vertex) const;
@@ -182,6 +186,10 @@ public:
                  const int vtx, const int color) const;
   void sgf_stream(std::ostream &out) const;
   
+
+  /*
+    =====================================================================
+  */
   // Ladder helper
   bool is_neighbor(const int vtx_1, const int vtx_2) const;
   bool would_be_ko_move(const int vtx, const int color) const;
@@ -201,6 +209,9 @@ public:
                      const int vtx, const int prey_color,
                      const int parent, size_t& ladder_nodes, bool fork) const;
   bool is_ladder(const int vtx) const;
+  /*
+    =====================================================================
+  */
 
 private:
   /*
@@ -281,6 +292,7 @@ private:
   / =====================================================================
   / 更新盤面
   */
+  void exchange_to_move();
   void add_stone(const int vtx, const int color);
   void remove_stone(const int vtx, const int color);
   void merge_strings(const int ip, const int aip);
@@ -295,11 +307,11 @@ private:
   / 領地計算，日式規則
   / TODO: seki 在非常特殊的情況下會搜尋失敗
   */
-  void find_dame(std::array<territory_t, NUM_VERTICES> &territory);
-  void find_seki(std::array<territory_t, NUM_VERTICES> &territory);
-  void reset_territory(std::array<territory_t, NUM_VERTICES> &territory);
-  std::pair<int, int> find_territory(std::array<territory_t, NUM_VERTICES> &territory);
-  std::pair<int, int> compute_territory();
+  void find_dame(std::array<territory_t, NUM_VERTICES> &territory) const;
+  void find_seki(std::array<territory_t, NUM_VERTICES> &territory) const;
+  void reset_territory(std::array<territory_t, NUM_VERTICES> &territory) const;
+  std::pair<int, int> find_territory(std::array<territory_t, NUM_VERTICES> &territory) const;
+  std::pair<int, int> compute_territory() const;
   /*
     =====================================================================
   */
@@ -318,13 +330,14 @@ inline int Board::get_index(const int x, const int y) const {
 }
 
 
-inline Board::vertex_t Board::get_state(int x, int y) const {
+inline Board::vertex_t Board::get_state(const int x, const int y) const {
   return m_state[get_vertex(x, y)];
 }
 
 inline Board::vertex_t Board::get_state(const int vtx) const {
   return m_state[vtx];
 }
+
 inline int Board::get_transform_idx(const int idx, const int sym) const {
   return symmetry_nn_idx_table[sym][idx];
 }

@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 
+#include "TimeControl.h"
 #include "Board.h"
 
 class GameState {
@@ -30,10 +31,9 @@ public:
   Board board;
 
   void set_to_move(int color);
-  void exchange_to_move();
 
-  float final_score(Board::rule_t rule);
-  float final_score();
+  float final_score(Board::rule_t rule, float addition_komi = 0) const;
+  float final_score(float addition_komi = 0) const;
 
   std::string get_sgf_string() const;
 
@@ -47,7 +47,16 @@ public:
 
   void result_stream(std::ostream &out);
   std::string result_to_string();
+  
+  void reset_time();
+  void time_clock();
+  float get_thinking_time() const;
+  void recount_time(int color);
+  void set_time_left(int color, int main_time, int byo_time);
+
 private:
+  TimeControl m_time_control;
+
   Board::rule_t m_rule{Board::rule_t::Tromp_Taylor};
 
   std::vector<std::shared_ptr<Board>> m_game_history;

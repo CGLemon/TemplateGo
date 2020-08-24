@@ -8,11 +8,10 @@
 
 class SGFstream {
 public:
-  static void save_sgf(std::string filename, GameState &state);
+  static void save_sgf(std::string filename, GameState &state, bool append = false);
 
 private:
-  static void sgf_stream(std::ostream &out, GameState &state,
-                         int winner = Board::EMPTY, float score = -1);
+  static void sgf_stream(std::ostream &out, GameState &state);
 
 };
 

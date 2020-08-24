@@ -3,53 +3,56 @@
 #ifdef USE_CUDA
 #include "cuda/CUDACommon.h"
 #include "Winograd_helper.h"
+#include "config.h"
+
 #include <vector>
+#include <array>
 
 class CudaBatchnorm {
 public:
   CudaBatchnorm() = default;
-  CudaBatchnorm(int batch, int channels);
+  CudaBatchnorm(const size_t conv_size, const size_t batch,
+                const size_t channels, bool ReLU = true);
   ~CudaBatchnorm();
-  // Forward: 須額外申請 device 端記憶體
+
   void Forward(const size_t batch, float *data,
                const float *const eltwise = nullptr);
-
-  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
-  void cpu_Forward(const int batch, std::vector<float> &data, float* eltwise = nullptr);
 
   void LoadingWeight(const std::vector<float> &means,
                      const std::vector<float> &stddevs);
 
+  void set_convsize(const size_t conv_size);
+
 private:
-  static constexpr int spatial_size = NUM_INTERSECTIONS;
+  int spatial_size;
   int m_channels;
   int m_batch;
 
+  bool m_ReLU;
   bool is_loaded{false};
   float *cuda_means;
   float *cuda_stddevs;
-  
 };
+
 
 class CudaConvolve {
 public:
   CudaConvolve() = default;
-  CudaConvolve(const size_t batch, const size_t filter,
-               const size_t in_channels, const size_t out_channels);
+  CudaConvolve(const size_t conv_size, const size_t batch,
+               const size_t filter, const size_t in_channels, const size_t out_channels);
   ~CudaConvolve();
-  // Forward: 須額外申請 device 端記憶體
+
   void Forward(const int batch, float *input, float *output,
-               void * cuda_scratch, size_t scratch_size, CudaHandel * handel);
-  
-  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體
-  // 不支持 cuDNN
-  void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
-  void LoadingWeight(const std::vector<float> &weights, size_t & scratch_size);
+               void *scratch, size_t scratch_size, CudaHandel *handel);
+
+  void LoadingWeight(const std::vector<float> &weights, size_t &scratch_size);
+
+  void set_convsize(const size_t conv_size);
 
 private:
-  static constexpr int width = CONV2D_SIZE;
-  static constexpr int height = CONV2D_SIZE;
-  static constexpr int spatial_size = width * height;
+  int width;
+  int height;
+  int spatial_size;
   int m_filter_dim;
   int m_batch;
   int m_filter;
@@ -75,47 +78,113 @@ class CudaFullyConnect {
 public:
   CudaFullyConnect() = default;
   CudaFullyConnect(const size_t batch, const size_t inputs, 
-                   const size_t outputs, bool is_relu);
+                   const size_t outputs, bool ReLU);
   ~CudaFullyConnect();
-  // Forward: 須額外申請 device 端記憶體
-  void Forward(const int batch, float *input,
-               float *output, CudaHandel * handel);
-  
-  // cpu_Forward: 可以直從 host 端進行運算，無須額外申請 device 端記憶體 
-  void cpu_Forward(const int batch, const std::vector<float> &input, std::vector<float> &output);
+
+  void Forward(const int batch,
+               float *input,
+               float *output,
+               CudaHandel *handel);
+
 
   void LoadingWeight(const std::vector<float> &weights,
                      const std::vector<float> &biases);
+
+  void set_size(const size_t in_size, const size_t out_size);
+
 private:
-  bool m_is_relu;
+  bool m_ReLU;
   int m_batch;
   int m_inputs;
   int m_outputs;
 
   bool is_loaded{false};
-  float* cuda_weights;
-  float* cuda_biases;
+  float *cuda_weights;
+  float *cuda_biases;
 };
 
-
-
-// TODO: 完成 Winograd Convolve
-class CudaWinogradConvolve3 {
+class CudaGlobalAvgPool {
 public:
-  CudaWinogradConvolve3() = default;
-  CudaWinogradConvolve3(const size_t batch,
-                        const size_t in_channels, const size_t out_channels);
-  ~CudaWinogradConvolve3();
-  void LoadingWeight(const std::vector<float> & weights);
-private:
-  static constexpr size_t inflate_radio = WINOGRAD_TILE;
+  CudaGlobalAvgPool() = default; 
+  CudaGlobalAvgPool(const size_t conv_size,
+                    const size_t batch,
+                    const size_t channels);
 
+  void Forward(const int batch, float *input, float *output);
+
+  void set_convsize(const size_t conv_size);
+
+private:
+  int width;
+  int height;
+  int spatial_size;
   int m_batch;
-  int m_in_channels;
-  int m_out_channels;
+  int m_channels;
+};
+
+class CudaSEUnit {
+public:
+  CudaSEUnit() = default;
+  CudaSEUnit(const size_t conv_size, const size_t batch,
+             const size_t channels, const size_t se_size);
+  ~CudaSEUnit();
+
+  void LoadingWeight(const std::vector<float> &weights_w1,
+                     const std::vector<float> &weights_b1,
+                     const std::vector<float> &weights_w2,
+                     const std::vector<float> &weights_b2);
+
+  void Forward(const int batch, float *input, float *output, CudaHandel *handel);
+
+  void set_convsize(const size_t conv_size);
+ 
+private:
+  int width;
+  int height;
+  int spatial_size;
+
+  int m_se_size;
+  int m_batch;
+  int m_channels;
 
   bool is_loaded{false};
-  float* cuda_weights;
+  std::array<float *, 3> cuda_op;
+
+  float *cuda_weights_w1;
+  float *cuda_weights_b1;
+  float *cuda_weights_w2;
+  float *cuda_weights_b2;
+};
+
+class CudaInputPool {
+public:
+  CudaInputPool() = default;
+  CudaInputPool(const size_t conv_size, const size_t batch,
+                const size_t input_size, const size_t channels);
+  ~CudaInputPool();
+
+  void LoadingWeight(const std::vector<float> &weights_w,
+                     const std::vector<float> &weights_b);
+
+  void Forward(const int batch, float *input, float *output, CudaHandel *handel);
+
+  void set_convsize(const size_t conv_size);
+ 
+private:
+  int width;
+  int height;
+  int spatial_size;
+
+  int m_batch;
+  int m_input_size;
+  int m_channels;
+
+  bool is_loaded{false};
+
+  float *cuda_op;
+  float *cuda_weights_w;
+  float *cuda_weights_b;
+
 };
 #endif
 #endif

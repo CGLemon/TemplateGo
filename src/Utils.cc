@@ -187,7 +187,7 @@ void Utils::gtp_printf(const char *fmt, ...) {
   va_start(ap, fmt);
   fprintf(stdout, "= ");
   vfprintf(stdout, fmt, ap);
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\n\n");
   va_end(ap);
 }
 
@@ -196,7 +196,7 @@ void Utils::gtp_fail_printf(const char *fmt, ...) {
   va_start(ap, fmt);
   fprintf(stdout, "? ");
   vfprintf(stdout, fmt, ap);
-  fprintf(stdout, "\n");
+  fprintf(stdout, "\n\n");
   va_end(ap);
 }
 
@@ -212,7 +212,7 @@ bool Utils::is_allnumber(std::string &number_str) {
 }
 
 bool Utils::is_number(char alpha) {
-  if (alpha >= 0 || alpha <= 9) {
+  if (alpha >= '0' && alpha <= '9') {
     return true;
   }
   return false;
@@ -239,6 +239,15 @@ bool Utils::is_float(std::string &float_str) {
   return true;
 }
 
+std::uint64_t Utils::rng_seed(int times) {
+  std::uint64_t seed =
+      static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
+  for (int i = 0; i < times; ++i) {
+    seed = seed * 16807ULL % 2147483647ULL;
+  }
+  return seed;
+}
+
 Utils::Timer::Timer() {
   clock();
   record_count = 0;
@@ -259,6 +268,13 @@ int Utils::Timer::get_duration_milliseconds() const {
   const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - m_clock_time).count();
   return milliseconds;
 }
+
+int Utils::Timer::get_duration_microseconds() const {
+  const auto end_time = std::chrono::steady_clock::now();
+  const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - m_clock_time).count();
+  return microseconds;
+}
+
 
 float Utils::Timer::get_duration() const {
   const auto seconds = get_duration_seconds();

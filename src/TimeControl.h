@@ -3,6 +3,7 @@
 
 #include <array>
 #include <chrono>
+#include <iostream>
 
 #include "Utils.h"
 #include "Board.h"
@@ -12,19 +13,22 @@ using namespace Utils;
 
 class TimeControl {
 public:
-  TimeControl(float main_time = 60 * 60 * 100, float byo_yomi_time = 0,
-              int byo_yomi_stones = 0);
+  TimeControl() = default;
 
+  void gether_time_settings();
+  void gether_time_settings(float main_time,
+                            float byo_yomi_time,
+                            int byo_yomi_stones);
   void reset();
-  void check_in_byo();
 
-  void print_time(int color);
   void clock();
   void spend_time(int color);
   
   bool is_overtime(int color) const;
   float get_thinking_time(int color, int boardsize, int num_move) const;  
 
+  void time_stream(std::ostream &out, int color) const;
+  void set_time_left(int color, int main_time, int byo_time);
 
 private:
   float m_maintime;
@@ -39,11 +43,11 @@ private:
 
   Timer m_timer;
 
-
+  void check_in_byo();
   bool one_stone_case(int color) const;
   float one_stone_think_time(int color) const;
   bool main_time_case(int color) const;
-  float main_time_think_time(int color, int boardsize, int num_move, float lagbuffer_cs) const;
+  float main_time_think_time(int color, int boardsize, int num_move) const;
 };
 
 #endif

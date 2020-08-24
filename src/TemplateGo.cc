@@ -1,4 +1,5 @@
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <string>
 
@@ -10,14 +11,10 @@
 
 using namespace std;
 
-
-
 void normal_loop() {
-
   auto maingame = std::make_shared<GameState>();
   maingame->init_game(cfg_boardsize, cfg_komi);
-
-  gtp::init_engine(*maingame);  
+  gtp::init_engine(*maingame);
 
   while (true) {
     maingame->display();
@@ -29,9 +26,34 @@ void normal_loop() {
   }
 }
 
-int main(int argc, char **argv) {
+/*
+void selfplay() {
+  auto maingame = std::make_shared<GameState>();
+  maingame->init_game(cfg_boardsize, cfg_komi);
+  gtp::init_engine(*maingame);
 
-  gtp::gtp_init_all(argc, argv);
+  auto cmd = std::stringstream{};
+
+  cmd << "selfplay";
+  cmd << " ";
+  cmd << cfg_selfplay_config;
+
+  gtp::execute(cmd.str());
+
+  if (cfg_auto_quit == true) {
+    auto quit = std::string{"quit"};
+    gtp::execute(quit);
+  }
+}
+*/
+
+int main(int argc, char **argv) {
+  gtp::set_up(argc, argv);
+
+  if (gtp::selfplay_command()) {
+    //selfplay();
+  }
+
   normal_loop();
 
   return 0;

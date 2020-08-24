@@ -6,12 +6,15 @@
 #include "GameState.h"
 #include "Zobrist.h"
 #include "cfg.h"
+#include "Engine.h"
 
 namespace gtp {
 
 static constexpr int GTP_VERSION = 2;
 
-void gtp_init_all(int argc, char **argv);
+extern Engine *engine;
+
+void set_up(int argc, char **argv);
 
 static const std::vector<std::string> gtp_commands = {"protocol_version",
                                                       "name",
@@ -25,13 +28,17 @@ static const std::vector<std::string> gtp_commands = {"protocol_version",
                                                       "play",
                                                       "genmove",
                                                       "showboard",
-                                                      "undo"
-                                                      ""};
+                                                      "undo",
+                                                      "time_settings",
+                                                      "time_left"};
 
 void init_engine(GameState &state);
 void execute(std::string input);
 bool gtp_execute(std::string input);
 void gtp_mode();
+
+bool selfplay_command();
+bool train_command();
 
 } // namespace gtp
 

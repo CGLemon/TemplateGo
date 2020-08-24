@@ -9,6 +9,7 @@
 #include "GameState.h"
 #include "Network.h"
 #include "config.h"
+#include "Model.h"
 
 class Evaluation {
 public:
@@ -18,8 +19,17 @@ public:
   NNeval network_eval(GameState &state,
                       Network::Ensemble ensemble = Network::RANDOM_SYMMETRY);
 
+  void reload_network(std::string &weightsfile);
+
+  void clear_cache();
+
+  void release_nn();
+
+  int get_fair_komi(GameState &state);
+
 private:
   Network m_network;
+
 };
 
 #endif

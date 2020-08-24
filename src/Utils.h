@@ -3,6 +3,7 @@
 
 #include "config.h"
 
+#include <random>
 #include <iostream>
 #include <cassert>
 #include <chrono>
@@ -31,6 +32,8 @@ bool is_float(std::string &float_str);
 
 float cached_t_quantile(int v);
 
+std::uint64_t rng_seed(int times = 1);
+
 
 template <class T> 
 void atomic_add(std::atomic<T> &f, T d) {
@@ -49,6 +52,8 @@ public:
   int get_duration_seconds() const;
   
   int get_duration_milliseconds() const;
+
+  int get_duration_microseconds () const;
 
   float get_duration() const;
 
@@ -69,7 +74,6 @@ private:
 
   size_t record_count;
 };
-
 
 
 }

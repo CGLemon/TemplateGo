@@ -1,28 +1,37 @@
 #include "TimeControl.h"
+#include "cfg.h"
+
+#include <iomanip>
 #include <cassert>
 
 using namespace Utils;
 
+void TimeControl::gether_time_settings() {
 
-TimeControl::TimeControl(float main_time, float byo_yomi_time,
-                         int byo_yomi_stones) {
+  gether_time_settings(cfg_maintime,
+                       cfg_byotime,
+                       cfg_byostones);
+}
+
+void TimeControl::gether_time_settings(float main_time,
+                                       float byo_yomi_time,
+                                       int byo_yomi_stones) {
   m_maintime = main_time;
   m_byotime = byo_yomi_time;
   m_byostones = byo_yomi_stones;
 
-  if (m_byostones <= 0) {
+  if (m_byostones <= 0 || m_byotime <= 0.0f) {
     m_byotime = 0.f;
     m_byostones = 0;
   }
+
+  reset();
 }
+
 
 void TimeControl::check_in_byo() {
   for (int i = 0; i < 2; ++i) {
-    if (m_maintime_left[i] <= 0.0f) {
-      m_inbyo[i] = true;
-    } else {
-      m_inbyo[i] = false;
-    }
+    m_inbyo[i] = (m_maintime_left[i] <= 0.0f);
   }
 }
 
@@ -35,14 +44,14 @@ void TimeControl::reset() {
   check_in_byo();
 }
 
-void TimeControl::print_time(int color) {
+
+void TimeControl::time_stream(std::ostream &out, int color) const {
   assert(color == Board::BLACK || color == Board::WHITE);
 
-  check_in_byo();
   if (color == Board::BLACK) {
-    auto_printf("Black time: ");
+    out << "Black time: ";
   } else {
-    auto_printf("White time: ");
+    out << "White time: ";
   }
 
   if (!m_inbyo[color]) {
@@ -50,17 +59,24 @@ void TimeControl::print_time(int color) {
     const int hours = remaining / 3600;
     const int minutes = (remaining % 3600) / 60;
     const int seconds = remaining % 60;
-    auto_printf("%02d:%02d:%02d\n", hours, minutes, seconds);
+    out << std::setw(2) << hours << ":";
+    out << std::setw(2) << std::setfill('0') << minutes << ":";
+    out << std::setw(2) << std::setfill('0') << seconds;
   } else {
     const int remaining = static_cast<int>(m_byotime_left[color]);
     const int stones_left = m_stones_left[color];
     const int hours = remaining / 3600;
     const int minutes = (remaining % 3600) / 60;
     const int seconds = remaining % 60;
-    auto_printf("%02d:%02d:%02d", hours, minutes, seconds);
-    auto_printf(", %d stones left\n", stones_left);
+
+    out << std::setw(2) << hours << ":";
+    out << std::setw(2) << std::setfill('0') << minutes << ":";
+    out << std::setw(2) << std::setfill('0') << seconds << ", ";;
+    out << "Stones left : " << stones_left;
   }
+  out << std::setfill(' ');
 }
+
 
 void TimeControl::clock() {
   m_timer.clock();
@@ -92,16 +108,19 @@ void TimeControl::spend_time(int color) {
 
     if (m_stones_left[color] == 0 && m_byotime_left[color] > 0.0f) {
       m_byotime_left[color] = m_byotime;
+      m_stones_left[color] = m_byostones;
     } else {
       assert(m_maintime_left[color] == 0);
-      assert(is_overtime(color));
+      assert(!is_overtime(color));
     }
   }
+
+  check_in_byo();
 }
 
 bool TimeControl::is_overtime(int color) const {
   assert(color == Board::BLACK || color == Board::WHITE);
-  if (m_maintime_left[color] >= 0.0f) {
+  if (m_maintime_left[color] > 0.0f) {
     return false;
   }
   if (m_byotime_left[color] > 0.0f) {
@@ -110,20 +129,33 @@ bool TimeControl::is_overtime(int color) const {
   return true;
 }
 
-
-
-int estimate_moves_expected(int boardsize, int num_move, size_t div_delta) {
+int estimate_moves_expected(int boardsize, int num_move, int div_delta) {
   const int board_div = 5 + div_delta;
-  const int base_remaining = (boardsize * boardsize) / board_div;
-  const int fast_moves = (boardsize * boardsize) / 6;
+  const int num_intersections = (boardsize * boardsize);
 
+  const int base_remaining = num_intersections / board_div;
+  const int fast_moves = num_intersections / 6;
+  const int moves_buffer = (num_intersections / 9);
+
+  int estimate_moves = 0;
   if (num_move < fast_moves) {
-    return (base_remaining + fast_moves) - num_move;
+    estimate_moves = base_remaining + fast_moves - num_move;
   } else {
-    return base_remaining;
+    estimate_moves = base_remaining - num_move ;
   }
+
+  if (estimate_moves < moves_buffer) {
+    estimate_moves = moves_buffer;
+  }
+
+  return estimate_moves;
 }
 
+void TimeControl::set_time_left(int color, int main_time, int byo_time) {
+  m_maintime_left[color] = static_cast<float>(main_time);
+  m_byotime_left[color] = static_cast<float>(byo_time);
+  check_in_byo();
+}
 
 float TimeControl::get_thinking_time(int color, int boardsize, int num_move) const {
 
@@ -138,7 +170,7 @@ float TimeControl::get_thinking_time(int color, int boardsize, int num_move) con
     return one_stone_think_time(color);
   }
   if (main_time_case(color)) {
-    return main_time_think_time(color, boardsize, num_move, lagbuffer_cs);
+    return main_time_think_time(color, boardsize, num_move);
   }
   assert(m_byostones != 0);
   
@@ -153,8 +185,6 @@ float TimeControl::get_thinking_time(int color, int boardsize, int num_move) con
     extra_time_per_move = extra_time_per_move > 0.f ? extra_time_per_move : 0.f;
 
     int moves_remaining = estimate_moves_expected(boardsize, num_move, 0);
-    moves_remaining = moves_remaining > 1 ? moves_remaining : 1;
-
     float base_time = time_remaining  / moves_remaining;
     float inc_time = extra_time_per_move;
     thinking_time  = base_time + inc_time;
@@ -172,11 +202,11 @@ bool TimeControl::one_stone_case(int color) const {
 
 float TimeControl::one_stone_think_time(int color) const {
   const float remining = m_byotime_left[color];
-  const float buffer_time = remining / 20.f;
-  if (buffer_time > 1.f) {
+  const float lagbuffer = remining / 20.f;
+  if (lagbuffer > 1.f) {
     return remining - 1.0f;
   }
-  return remining - buffer_time;
+  return remining - lagbuffer;
 }
 
 bool TimeControl::main_time_case(int color) const {
@@ -186,16 +216,25 @@ bool TimeControl::main_time_case(int color) const {
   return false;
 }
 
-float TimeControl::main_time_think_time(int color, int boardsize, int num_move, float lagbuffer_cs) const {
-  float time_remaining = (m_maintime_left[color] - lagbuffer_cs);
-  time_remaining = time_remaining > 0.f ? time_remaining : 0.f;
+float TimeControl::main_time_think_time(int color, int boardsize, int num_move) const {
+  const float lagbuffer = 0.1f;
+  const float remining = m_maintime_left[color];
+  int addition_threads = cfg_uct_threads-1;
+  if (addition_threads < 0) {
+    addition_threads = 0;
+  }
 
-  int moves_remaining = estimate_moves_expected(boardsize, num_move, 0);
-  moves_remaining = moves_remaining > 1 ? moves_remaining : 1;
+  const float zero_think_lagbuffer = 1.0f + 1.2 * addition_threads * lagbuffer;
+  if (remining <= zero_think_lagbuffer) {
+    return 0.0f;
+  }
 
-  float time = time_remaining / (float)moves_remaining;
+  int moves_remaining = estimate_moves_expected(boardsize, num_move, -3);
+  
+  float time = remining / (float)moves_remaining;
 
+  if (time - lagbuffer < 0) {
+    time = 0.f;
+  }
   return time;
 }
-
-

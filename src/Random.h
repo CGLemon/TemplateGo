@@ -5,15 +5,14 @@
 #include <limits>
 #include <random>
 #include <thread>
-#include <time.h>
 
 /*
  * https://github.com/lemire/testingRNG
  */
 
-
-static constexpr std::uint64_t THREADS_SEED = 0;
-static constexpr std::uint64_t TIME_SEED = 1;
+static constexpr std::uint64_t CFG_DEFAULT = 0;
+static constexpr std::uint64_t THREADS_SEED = 1;
+static constexpr std::uint64_t TIME_SEED = 2;
 
 enum class random_t {
   SplitMix_64,

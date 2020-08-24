@@ -4,23 +4,29 @@
 #include "Evaluation.h"
 #include "Search.h"
 #include "UCTNode.h"
-#include "Utils.h"
+#include "Random.h"
 #include "cfg.h"
 
 using namespace Utils;
 
 ThreadPool SearchPool;
 
-Search::Search(GameState &state, Evaluation &evaluation)
-    : m_rootstate(state), m_evaluation(evaluation) {
+Search::Search(GameState &state, Evaluation &evaluation, Trainer &trainer)
+    : m_gamestate(state), m_evaluation(evaluation), m_trainer(trainer) {
   set_playout(cfg_playouts);
 
   int threads = cfg_uct_threads - 1;
   if (threads < 0) {
     threads = 0;
   }
-
+  m_rootstate = m_gamestate;
   SearchPool.initialize(this, threads);
+}
+
+Search::~Search() {
+  set_running(false);
+  SearchPool.wait_finish();
+  clear_nodes();
 }
 
 int Search::think(Search::strategy_t strategy) {
@@ -29,46 +35,104 @@ int Search::think(Search::strategy_t strategy) {
     return nn_direct_output();
   } else if (strategy == strategy_t::NN_UCT) {
     return uct_search();
+  } else if (strategy == strategy_t::RANDOM) {
+    return random_move();
   }
 
   return Board::NO_VERTEX;
 }
 
+int Search::random_move() {
+  m_rootstate = m_gamestate;
+  int move = 0;  
+
+  auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
+  const size_t boardsize = m_rootstate.board.get_boardsize();
+  const size_t intersections = m_rootstate.board.get_intersections();
+  while (true) {
+    const size_t randmove = rng.randuint64() % intersections;
+   /*
+    if (randmove == intersections) {
+    
+      move = Board::PASS;
+      break;
+    } else {
+    */
+      const auto x = randmove % boardsize;
+      const auto y = randmove / boardsize;
+      const auto vtx = m_rootstate.board.get_vertex(x, y);
+      const auto to_move = m_rootstate.board.get_to_move();
+      const auto success = m_rootstate.board.is_legal(vtx, to_move);
+
+      if (success) {
+        move = vtx;
+        break;
+      }
+   /*
+    }
+    */
+  }
+  return move;
+}
+
 int Search::nn_direct_output() {
-  Evaluation::NNeval eval = m_evaluation.network_eval(m_rootstate);
+  m_rootstate = m_gamestate;
+
+  Evaluation::NNeval eval = m_evaluation.network_eval(m_rootstate, Network::Ensemble::NONE);
 
   int to_move = m_rootstate.board.get_to_move();
   int out_vertex = Board::NO_VERTEX;
-  float most_policy = std::numeric_limits<float>::lowest();
+  float bset_policy = std::numeric_limits<float>::lowest();
 
-  auto_printf("policy out : \n");
+  const auto boardsize = m_rootstate.board.get_boardsize();
+  const auto intersections = boardsize * boardsize;
+  auto_printf(" policy out : \n");
 
-  for (int idx = 0; idx < NUM_INTERSECTIONS; idx++) {
-    const auto idx_pair = Network::get_intersections_pair(idx, BOARD_SIZE);
-    const int x = idx_pair.first;
-    const int y = idx_pair.second;
-    const int vertex = m_rootstate.board.get_vertex(x, y);
 
-    if (m_rootstate.board.is_legal(vertex, to_move)) {
-      if (most_policy < eval.policy[idx]) {
-        most_policy = eval.policy[idx];
+  for (int y = 0; y < boardsize; ++y) {
+    for (int x = 0; x < boardsize; ++x) {
+      const auto vertex = m_rootstate.board.get_vertex(x, y);
+      const auto idx = m_rootstate.board.get_index(x, y);
+      if (m_rootstate.board.is_legal(vertex, to_move) && bset_policy < eval.policy[idx]) {
+        bset_policy = eval.policy[idx];
         out_vertex = vertex;
       }
+      auto_printf("%.5f ", eval.policy[idx]);
     }
+    auto_printf("\n");
+  }
 
-    auto_printf("%.5f ", eval.policy[idx]);
-    if (x == BOARD_SIZE - 1) {
+  if (bset_policy < eval.policy_pass) {
+    out_vertex = Board::PASS;
+  }
+  auto_printf(" pass : %.5f \n\n", eval.policy_pass);
+
+
+  auto_printf(" final score out : \n");
+  for (auto &s : eval.final_score) {
+    auto_printf("%.5f ", s);
+  }
+  auto_printf("\n\n");
+
+
+  auto_printf(" ownership out : \n");
+  for (auto idx = size_t{0}; idx < intersections; idx++) {
+    const auto x = idx % boardsize;
+    auto_printf("%.5f ", eval.ownership[idx]);
+    if (x == boardsize - 1) {
       auto_printf("\n");
     }
   }
-  if (most_policy < eval.policy_pass) {
-    out_vertex = Board::PASS;
+  auto_printf("\n\n");
+  for (auto idx = size_t{0}; idx < VALUE_LABELS; idx++) {
+    const auto winrate = eval.winrate_lables[idx];
+    auto_printf("%f ", winrate);
   }
-  auto_printf("pass : %.5f \n", eval.policy_pass);
+  auto_printf("\n");
 
-  auto_printf("NN eval = ");
-  auto_printf("%f\n", eval.winrate[0]);
-  auto_printf("%");
+  auto_printf(" NN eval = ");
+  auto_printf("%f", eval.winrate);
+  auto_printf("%\n");
   return out_vertex;
 }
 
@@ -77,7 +141,12 @@ void Search::set_playout(int playouts) {
   m_maxplayouts = m_maxplayouts >= 1 ? m_maxplayouts : 1;
 }
 
-float Search::get_min_psa_ratio() const {
+float Search::get_min_psa_ratio() {
+  auto v = m_playouts.load();
+  if (v >= MAX_PLAYOUYS) {
+    set_running(false);
+    return 1.0f;
+  }
   return 0.0f;
 }
 
@@ -85,58 +154,69 @@ void Search::increment_playouts() {
   m_playouts++;
 }
 
-SearchResult Search::play_simulation(GameState &currstate, UCTNode *const node,
-                                     UCTNode *const root_node) {
-  auto result = SearchResult{};
+void Search::play_simulation(GameState &currstate, UCTNode *const node,
+                             UCTNode *const root_node, SearchResult &search_result) {
   node->increment_threads();
 
   if (node->expandable()) {
     if (currstate.board.get_passes() >= 2) {
-      float score = currstate.final_score();
-      result = SearchResult::from_score(score);
+      search_result.from_score(currstate);
     } else {
-      float eval;
+      std::shared_ptr<NNOutputBuffer> nn_output;
       const bool had_children = node->has_children();
-      const bool success = node->expend_children(m_evaluation, currstate, eval,
+      const bool success = node->expend_children(m_evaluation, currstate, nn_output,
                                                  get_min_psa_ratio());
       if (!had_children && success) {
-        result = SearchResult::from_eval(eval);
+        search_result.from_nn_output(nn_output);
       }
     }
   }
 
-  if (node->has_children() && !result.valid()) {
+  if (node->has_children() && !search_result.valid()) {
     const int color = currstate.board.get_to_move();
     auto next = node->uct_select_child(color, node == root_node);
     auto move = next->get_vertex();
 
     currstate.play_move(move, color);
-    currstate.exchange_to_move();
 
     if (move != Board::PASS && currstate.superko()) {
       next->invalinode();
     } else {
-      result = play_simulation(currstate, next, root_node);
+      play_simulation(currstate, next, root_node, search_result);
     }
   }
 
-  if (result.valid()) {
-    node->update(result.eval());
+  if (search_result.valid()) {
+    auto out = search_result.nn_output();
+    node->update(out);
   }
 
   node->decrement_threads();
-  return result;
 }
 
-void Search::updata_root(std::shared_ptr<UCTNode> root_node) {
-  float eval = root_node->prepare_root_node(m_evaluation, m_rootstate);
+void Search::updata_root(UCTNode *root_node) {
+  std::shared_ptr<NNOutputBuffer> nn_output;
+  root_node->prepare_root_node(m_evaluation, m_rootstate, nn_output);
+  const auto to_move = m_rootstate.board.get_to_move();
 
-  if (m_rootstate.board.get_to_move() == Board::WHITE) {
+  auto eval = nn_output->eval;
+
+  if (to_move == Board::WHITE) {
     eval = 1.0f - eval;
   }
-  auto_printf("NN eval = ");
-  auto_printf("%f", eval);
-  auto_printf("%\n");
+  eval *= 100.f;
+  auto_printf("Root :\n");
+  auto_printf(" NN eval = ");
+  auto_printf("%f%%\n", eval);
+
+
+  auto score = nn_output->final_score;
+  if (to_move == Board::WHITE) {
+    score = 0 - score;
+  }
+
+  auto_printf(" NN final score = ");
+  auto_printf("%d\n", score);
 }
 
 bool check_release(size_t tot_sz, size_t sz, std::string name) {
@@ -148,74 +228,160 @@ bool check_release(size_t tot_sz, size_t sz, std::string name) {
   return (tot_sz == 0); 
 }
 
+bool Search::is_in_time(const float max_time) {
+  float seconds = m_timer.get_duration();
+  if (seconds < max_time) {
+    return true;
+  }
+  return false;
+}
 
+void Search::ponder_search() {
+  prepare_uct_search();
+  SearchPool.wakeup();
+}
 
+void Search::ponder_stop() {
+  set_running(false);
+  SearchPool.wait_finish();
+  clear_nodes();
+}
 
 int Search::uct_search() {
+  m_gamestate.time_clock();
+
+  if (cfg_ponder) {
+    ponder_stop();
+  }
+
+  m_rootstate = m_gamestate;
   int select_move = Board::NO_VERTEX;
-  bool success = true;
   bool keep_running = true;
   bool need_resign = false;
-  bool pass_win = Heuristic::pass_to_win(m_rootstate, 0.2f);
+  bool pass_win = Heuristic::pass_to_win(m_rootstate);
   if (pass_win) {
+
+    if (cfg_ponder) {
+      m_rootstate.play_move(Board::PASS);
+      ponder_search();
+    }
+
+    m_trainer.gather_step(m_rootstate, Board::PASS);
     return Board::PASS;
   }
-
-  {
-    auto root_data = std::make_shared<DataBuffer>();
-    auto root_node = std::make_shared<UCTNode>(root_data);
-
-    m_rootnode = root_node.get();
-
-    updata_root(root_node);
-    prepare_uct_search();
+  const float thinking_time = m_rootstate.get_thinking_time();
+  auto_printf("Max thining time : %.4f seconds\n", thinking_time);
   
+  m_timer.clock();
+
+  
+  prepare_uct_search();
+  updata_root(m_rootnode);
+  
+  if (thinking_time > 0.1f) {
     SearchPool.wakeup();
-
-    do {
-      auto current = std::make_shared<GameState>(m_rootstate);
-      auto result = play_simulation(*current, m_rootnode, m_rootnode);
-      if (result.valid()) {
-        increment_playouts();
-      }
-
-      keep_running &= is_over_playouts();
-      set_running(keep_running);
-    } while (is_uct_running());
-
-    SearchPool.wait_finish();
-    
-    UCT_Information::dump_stats(m_rootstate, m_rootnode);
-
-    select_move = root_node->get_best_move();
-    need_resign = Heuristic::should_be_resign(m_rootstate, m_rootnode, cfg_resign_threshold);
   }
-  
-  success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
-  success &= check_release(UCTNode::node_tree_size, sizeof(UCTNode), "Node");
-  success &= check_release(DataBuffer::node_data_size, sizeof(DataBuffer), "Data");
+  do {
+    auto current = std::make_shared<GameState>(m_rootstate);
+    auto result = SearchResult{};
+    play_simulation(*current, m_rootnode, m_rootnode, result);
+    if (result.valid()) {
+      increment_playouts();
+    }
 
-  assert(success);
+    keep_running &= is_over_playouts();
+    keep_running &= is_in_time(thinking_time);
+    set_running(keep_running);
+  } while (is_uct_running());
+
+  SearchPool.wait_finish();
+
+  const auto seconds = m_timer.get_duration();
+  const auto playouts = m_playouts.load();
+  auto_printf("Basic\n");
+  auto_printf(" playouts : %d\n", playouts);
+  auto_printf(" spent : %2.5f (seconds)\n", seconds);
+  auto_printf(" speed : %2.5f (playouts/seconds) \n", (float)playouts / seconds );
+  UCT_Information::dump_stats(m_rootstate, m_rootnode);
+
+  select_move = select_best_move();
+
+  need_resign = Heuristic::should_be_resign(m_rootstate, m_rootnode, cfg_resign_threshold);
+ 
+  m_trainer.gather_step(m_rootstate, *m_rootnode);
+  clear_nodes();
+  
   assert(select_move != Board::NO_VERTEX);
 
+  m_gamestate.recount_time(m_gamestate.board.get_to_move());
+
+
   if (need_resign) {
-    return Board::RESIGN;
+    select_move = Board::RESIGN;
+  }
+
+  if (cfg_ponder && select_move != Board::RESIGN) {
+    m_rootstate.play_move(select_move);
+    ponder_search();
   }
 
   return select_move;
 }
 
-void Search::prepare_uct_search() {
-  m_running = true;
-  m_playouts = 0;
+int Search::select_best_move() {
+  int select_move = Board::NO_VERTEX;
+  const int movenum = m_rootstate.board.get_movenum();
+  const int boardsize = m_rootstate.board.get_boardsize();
+  const int intersections = boardsize * boardsize;
+
+  cfg_random_move_cnt = intersections / (boardsize + 5);  
+  if (cfg_random_move_cnt >= movenum && cfg_random_move) {
+    select_move = m_rootnode->randomize_first_proportionally(1.0f);
+  }
+
+  if (select_move != Board::NO_VERTEX) {
+    return select_move;
+  }
+
+  select_move = m_rootnode->get_best_move();
+  return select_move;
 }
+
+void Search::prepare_uct_search() {
+
+  assert(m_rootnode == nullptr);
+  auto root_data = std::make_shared<DataBuffer>();
+
+  m_rootnode = new UCTNode(root_data);
+  m_playouts = 0;
+
+  set_running(true);
+}
+
+void Search::clear_nodes() {
+  if (m_rootnode == nullptr) {
+    return;
+  }
+
+  delete m_rootnode;
+  m_rootnode = nullptr;
+
+  bool success = true;
+
+  success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
+  success &= check_release(UCTNode::node_tree_size, sizeof(UCTNode), "Node");
+  success &= check_release(DataBuffer::node_data_size, sizeof(DataBuffer), "Data");
+
+  assert(success);
+}
+
 
 bool Search::is_over_playouts() const {
   return m_playouts.load() < m_maxplayouts;;
 }
 
 void Search::set_running(bool is_running) {
-  m_running = is_running;
+  m_running.store(is_running);
 }
 
 bool Search::is_uct_running() {
@@ -224,20 +390,17 @@ bool Search::is_uct_running() {
 
 void Search::benchmark(int playouts) {
 
+  int old_playouts = m_maxplayouts;
   set_playout(playouts);  
-  Timer timer;
 
   int move = uct_search();
-  float seconds = timer.get_duration();
+  (void) move;
 
-  auto_printf("playouts : %d\n", m_playouts.load());
-  auto_printf("time : %2.5f seconds\n", seconds);
-
-  set_playout(cfg_playouts);
+  set_playout(old_playouts);
 }
 
 void ThreadPool::add_thread() {
-  m_threads.emplace_back([this] {
+  m_threads.emplace_back([this](){
     while(true) {
       {
         m_searching = false;
@@ -284,7 +447,8 @@ void ThreadPool::worker() {
   auto m_root = m_search->m_rootnode;
   do {
     auto currstate = std::make_unique<GameState>(m_search->m_rootstate);
-    auto result = m_search->play_simulation(*currstate, m_root, m_root);
+    auto result = SearchResult{};
+    m_search->play_simulation(*currstate, m_root, m_root, result);
     if (result.valid()) {
       m_search->increment_playouts();
     }

@@ -10,6 +10,8 @@
 void GameState::init_game(int size, float komi) {
   board.reset_board(size, komi);
 
+  reset_time();
+
   m_game_history.clear();
   m_game_history.emplace_back(std::make_shared<Board>(board));
 
@@ -20,7 +22,6 @@ void GameState::init_game(int size, float komi) {
 }
 
 bool GameState::play_move(const int vtx, const int color) {
-
   if (isGameOver()) {
     return false;
   }
@@ -29,13 +30,14 @@ bool GameState::play_move(const int vtx, const int color) {
     return false;
   }
   if (vtx == Board::RESIGN) {
+    set_to_move(color);
     m_resigned = color;
     return true;
   } else {
     board.play_move(vtx, color);
   }
   const int movenum = board.get_movenum();
-  assert(movenum == m_game_history.size());
+  assert((unsigned)movenum == m_game_history.size());
 
   m_game_history.emplace_back(std::make_shared<Board>(board));
   m_game_history.resize(movenum + 1);
@@ -62,8 +64,8 @@ bool GameState::play_textmove(std::string input) {
   std::stringstream move_stream(input);
   std::string cmd;
   int cmd_count = 0;
-  int color;
-  int vertex;
+  int color = Board::INVAL;
+  int vertex = Board::NO_VERTEX;
   while (move_stream >> cmd) {
     cmd_count++;
     if (cmd_count == 1) {
@@ -133,9 +135,9 @@ bool GameState::play_move(const int vtx) {
   return play_move(vtx, to_move);
 }
 
-void GameState::set_to_move(int color) { board.set_to_move(color); }
-
-void GameState::exchange_to_move() { board.exchange_to_move(); }
+void GameState::set_to_move(int color) { 
+  board.set_to_move(color);
+}
 
 void GameState::display() const {
   auto res = display_to_string();
@@ -156,6 +158,12 @@ std::string GameState::display_to_string() const {
 
   out << std::endl;
   board.hash_stream(out);
+
+  out << std::endl;
+  m_time_control.time_stream(out, Board::BLACK);
+
+  out << std::endl;
+  m_time_control.time_stream(out, Board::WHITE);
 
   return out.str();
 }
@@ -179,12 +187,18 @@ void GameState::set_rule(Board::rule_t rule) {
   m_rule = rule;
 }
 
-float GameState::final_score(Board::rule_t rule) {
-  return board.area_score(board.get_komi(), rule);
+float GameState::final_score(Board::rule_t rule, float addition_komi) const {
+  float score = board.area_score(board.get_komi(), rule) - addition_komi;
+  float error = 1e-2;
+  if (score < error && score > (-error)) {
+    score = 0.0f;
+  }
+
+  return score;
 }
 
-float GameState::final_score() {
-  return final_score(m_rule);
+float GameState::final_score(float addition_komi) const {
+  return final_score(m_rule, addition_komi);
 }
 
 Board::rule_t GameState::get_rule() const {
@@ -207,10 +221,9 @@ int GameState::get_winner() {
 
   if (board.get_passes() >= 2) {
     float score = final_score();
-    float error = 1e-4;
-    if (score > error) {
+    if (score > 0.0f) {
       return Board::BLACK;
-    } else if (score < (-error)){
+    } else if (score < 0.0f){
       return Board::WHITE;
     } else {
       return Board::EMPTY;
@@ -240,10 +253,9 @@ void GameState::result_stream(std::ostream &out) {
       out << "Black wins by resigned";
     } else {
       float score = final_score();
-      float error = 1e-4;
-      if (score > error) {
+      if (score > 0.0f) {
         out << "Black wins +" << score;
-      } else if (score < (-error)){
+      } else if (score < 0.0f){
         score = (-score);
         out << "White wins +" << score;
       } else {
@@ -265,15 +277,36 @@ std::string GameState::result_to_string() {
 const std::shared_ptr<Board> GameState::get_past_board(int moves_ago) const {
   const int movenum = board.get_movenum();
   assert(moves_ago >= 0 && (unsigned)moves_ago <= movenum);
-  assert(movenum + 1 <= m_game_history.size());
+  assert((unsigned)movenum + 1 <= m_game_history.size());
   return m_game_history[movenum - moves_ago];
 }
 
 bool GameState::superko() const {
 
-  auto first = crbegin(m_kohash_history);
-  auto last = crend(m_kohash_history);
+  auto first = std::crbegin(m_kohash_history);
+  auto last = std::crend(m_kohash_history);
   auto res = std::find(++first, last, board.get_ko_hash());
 
   return (res != last);
+}
+
+void GameState::reset_time() {
+  m_time_control.gether_time_settings();
+}
+
+void GameState::time_clock() {
+  m_time_control.clock();
+}
+
+float GameState::get_thinking_time() const {
+  return m_time_control.get_thinking_time(
+             board.get_to_move(), board.get_boardsize(), board.get_movenum());
+}
+
+void GameState::recount_time(int color) {
+  m_time_control.spend_time(color);
+}
+
+void GameState::set_time_left(int color, int main_time, int byo_time) {
+  m_time_control.set_time_left(color, main_time, byo_time);
 }

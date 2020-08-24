@@ -16,11 +16,16 @@ struct DataBuffer {
   static void increment_size(size_t sz);
   static void decrement_size(size_t sz);
 
-  float delta;
   float policy;
   int vertex;
   
   void filled_invalid_data();
+};
+
+struct NNOutputBuffer {
+  float eval;
+  int final_score;
+  std::vector<float> ownership;
 };
 
 
@@ -32,7 +37,6 @@ class Edge {
 public:
   Edge(std::shared_ptr<DataBuffer> data);
   ~Edge();
-  //Edge(Edge &&n);
   Edge(const Edge &) = delete;
 
   static size_t edge_tree_size;
@@ -44,7 +48,7 @@ public:
   int get_vertex() const;
   float get_policy() const;         
   int get_visits() const;
-  float get_eval(int color) const; 
+  float get_eval(int color, bool use_virtual_loss = true) const; 
 
   void inflate();
   void kill_node();
@@ -65,12 +69,6 @@ public:
   bool acquire_inflating();
  
   UCTNode *get_node() const;
-
-  //UCTNode *operator->() const {
-  //  return read_ptr(m_pointer.load()); 
-  //}
-
-  //Edge &operator=(Edge &&n);
 
 private:
   std::shared_ptr<DataBuffer> m_data;
@@ -133,21 +131,21 @@ public:
   UCTNode() = delete;
   ~UCTNode();
 
-  bool expend_children(Evaluation &evaluation, GameState &state, float &eval,
-                       float min_psa_ratio, bool kill_superkos = false);
+  bool expend_children(Evaluation &evaluation, GameState &state,
+                       std::shared_ptr<NNOutputBuffer> &nn_output, float min_psa_ratio, bool kill_superkos = false);
 
   void link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
                      float min_psa_ratio);
 
   float get_raw_evaluation(int color) const;
   float get_accumulated_evals() const;
-  float get_eval(int color) const;
+  float get_eval(int color, bool use_virtual_loss = true) const;
   int get_visits() const;
   int get_vertex() const;
   float get_policy() const;
   int get_color() const;
 
-  void update(float eval);
+  void update(std::shared_ptr<NNOutputBuffer> nn_output);
   void accumulate_eval(float eval);
   void inflate_all_children();
   bool prune_child(int vtx);
@@ -158,10 +156,12 @@ public:
 
   // 一定要有對應 vtx 的子節點
   UCTNode *get_child(const int vtx);
+  const std::vector<std::shared_ptr<Edge>>& get_children() const;
+
 
   int get_most_visits_move();
   void dirichlet_noise(float epsilon, float alpha);
-  float prepare_root_node(Evaluation &evaluation, GameState &state);
+  void prepare_root_node(Evaluation &evaluation, GameState &state, std::shared_ptr<NNOutputBuffer> &nn_output);
 
   void increment_threads();
   void decrement_threads();
@@ -183,9 +183,12 @@ public:
   float get_eval_lcb(int color) const;
   float get_eval_variance(float default_var) const;
   int get_best_move();
+  int randomize_first_proportionally(float random_temp = 1.0f);
 
   std::vector<std::pair<float, int>> get_lcb_list(const int color);
   std::vector<std::pair<float, int>> get_winrate_list(const int color);
+
+  const std::vector<float>& get_ownership() const;
 
 private:
   std::shared_ptr<DataBuffer> m_data;
@@ -193,7 +196,7 @@ private:
   enum Status : std::uint8_t { 
       INVALID, 
       PRUNED,
-      ACTIVE 
+      ACTIVE
   };
   std::atomic<Status> m_status{ACTIVE};  
 
@@ -201,28 +204,31 @@ private:
 
   std::atomic<int> m_visits{0}; // 節點訪問的次數
 
-  // m_raw_black_eval 黑方的網路輸出勝率
-  float m_raw_black_eval{0.0f};
-  float m_delta_loss;
+  std::shared_ptr<NNOutputBuffer> m_black_nn_output{nullptr}; // 黑方的網路輸出
 
   std::atomic<float> m_squared_eval_diff{1e-4f};
 
-  // m_accumulated_black_evals 黑方經樹搜索累積的 Q 值
-  std::atomic<float> m_accumulated_black_evals{0.0};
+  std::atomic<float> m_accumulated_black_evals{0.0}; // 黑方經樹搜索累積的 Q 值
 
   std::vector<std::shared_ptr<Edge>> m_children;
 
-  //std::atomic<int> m_virtual_loss{0};
-  std::atomic<int> m_loading_threads{0};
+  std::atomic<int> m_loading_threads{0}; // 此結點下包含的 thread 數目
 
   enum class ExpandState : std::uint8_t { 
       INITIAL = 0, 
       EXPANDING, 
-      EXPANDED 
+      EXPANDED,
+      UPDATE
   };
 
   std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
 
+
+  bool acquire_update();
+
+  bool wait_update();
+
+  void update_done();
 
   bool acquire_expanding();
 
@@ -265,9 +271,11 @@ class UCT_Information {
 public:
   static size_t get_memory_used();
   
-  static void tree_stats(); 
+  static void tree_stats();
 
-  static void dump_stats(GameState& state, UCTNode *node);
+  static void dump_ownership(GameState &state, UCTNode *node); 
+
+  static void dump_stats(GameState& state, UCTNode *node, int cut_off = -1);
 
   static std::string pv_to_srting(UCTNode *node, GameState& state);
 
@@ -277,7 +285,7 @@ public:
 
 class Heuristic {
 public:
-  static bool pass_to_win(GameState & state, float threshold);
+  static bool pass_to_win(GameState & state);
 
   static bool should_be_resign(GameState & state, UCTNode *node, float threshold);
 

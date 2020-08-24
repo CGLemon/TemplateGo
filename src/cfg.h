@@ -4,6 +4,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string>
+
+#include "Utils.h"
 extern FILE *cfg_logfile_stream;
 
 extern bool cfg_quiet;
@@ -30,16 +32,28 @@ extern int cfg_maintime;
 extern int cfg_byotime;
 extern int cfg_byostones;
 
+extern bool cfg_auto_quit;
+
+extern std::string cfg_selfplay_config;
+extern bool cfg_selfplay_agent;
+extern bool cfg_random_move;
+extern size_t cfg_random_move_cnt;
 extern int cfg_boardsize;
 extern float cfg_komi;
 extern int cfg_playouts;
 extern float cfg_allow_pass_ratio;
+extern size_t cfg_random_min_visits;
 extern int cfg_batchsize;
+extern bool cfg_ponder;
 
 extern float cfg_resign_threshold;
 
+extern size_t cfg_max_game_buffer;
+extern bool cfg_collect;
+
+extern std::uint64_t cfg_default_seed;
+
 void init_cfg();
 void arg_parser(int argc, char **argv);
-void cfg_loader(std::string filename);
-bool cfg_loader_parser(std::string cfg);
+void adjust_batchsize(int batchsize);
 #endif
