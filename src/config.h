@@ -20,7 +20,6 @@ static constexpr int DEFULT_BOARDSIZE = BOARD_SIZE;
 static_assert(BOARD_SIZE <= MARCRO_MAX_BOARDSIZE, "");
 static_assert(BOARD_SIZE >= MARCRO_MIN_BOARDSIZE, "");
 
-
 static const std::string PROGRAM_NAME = "TemplateGo";
 static const std::string PROGRAM_VERSION = "Alpha";
 
