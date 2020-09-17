@@ -26,9 +26,10 @@ bool GameState::play_move(const int vtx, const int color) {
     return false;
   }
 
-  if (!board.is_legal(vtx, color, m_kohash_history.data())) {
+  if (!board.is_legal(vtx, color)) {
     return false;
   }
+
   if (vtx == Board::RESIGN) {
     set_to_move(color);
     m_resigned = color;
@@ -139,31 +140,24 @@ void GameState::set_to_move(int color) {
   board.set_to_move(color);
 }
 
-void GameState::display() const {
-  auto res = display_to_string();
+void GameState::display(const size_t strip) const {
+  auto res = display_to_string(strip);
   Utils::auto_printf("%s\n", res.c_str());
 }
 
-std::string GameState::display_to_string() const {
+std::string GameState::display_to_string(const size_t strip) const {
   auto out = std::ostringstream{};
 
-  out << std::endl;
-  board.prisoners_stream(out);
-
-  out << std::endl;
   board.tomove_stream(out);
-
-  out << std::endl;
   board.board_stream(out, board.get_last_move());
-
-  out << std::endl;
+  board.info_stream(out);
+  board.prisoners_stream(out);
   board.hash_stream(out);
+  m_time_control.time_stream(out);
 
-  out << std::endl;
-  m_time_control.time_stream(out, Board::BLACK);
-
-  out << std::endl;
-  m_time_control.time_stream(out, Board::WHITE);
+  for (auto s = size_t{0}; s < strip; ++s) {
+    out << std::endl;
+  }
 
   return out.str();
 }
@@ -287,7 +281,7 @@ bool GameState::superko() const {
   auto last = std::crend(m_kohash_history);
   auto res = std::find(++first, last, board.get_ko_hash());
 
-  return (res != last);
+  return res != last;
 }
 
 void GameState::reset_time() {

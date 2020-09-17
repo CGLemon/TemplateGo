@@ -11,7 +11,6 @@
 #include "Random.h"
 #include "Utils.h"
 #include "Blas.h"
-#include "cfg.h"
 #include "config.h"
 
 #ifdef USE_CUDA
@@ -102,10 +101,15 @@ void Network::reload_weights(const std::string &weightsfile) {
 
 // TODO: probe_cache 翻轉搜尋?
 bool Network::probe_cache(const GameState *const state,
-                          Network::Netresult &result) {
-  if (m_nncache.lookup(state->board.get_hash(), result)) {
-    return true;
+                          Network::Netresult &result,
+                          const int symmetry) {
+
+  const bool success = m_nncache.lookup(state->board.get_hash(), result);
+
+  if (success) {
+    result = Model::get_result_form_cache(result);
   }
+
   // If we are not generating a self-play game, try to find
   // symmetries if we are in the early opening.
   /*
@@ -130,7 +134,7 @@ if (!cfg_noise && !cfg_random_cnt
 }
   */
 
-  return false;
+  return success;
 }
 
 std::pair<int, int> Network::get_intersections_pair(int idx, int boradsize) {
@@ -145,7 +149,8 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
   assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
 
   auto policy_out = std::vector<float>(POTENTIAL_MOVES);
-  auto finalscore_out = std::vector<float>(OUTPUTS_FINALSCORE * NUM_INTERSECTIONS);
+  auto scorebelief_out = std::vector<float>(OUTPUTS_SCOREBELIEF * NUM_INTERSECTIONS);
+  auto finalscore_out = std::vector<float>(FINAL_SCORE);
   auto ownership_out = std::vector<float>(OUTPUTS_OWNERSHIP * NUM_INTERSECTIONS);
   auto winrate_out = std::vector<float>(VALUE_LABELS);
 
@@ -155,12 +160,13 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
   const auto input_features = Model::gather_features(state);
 
   m_forward->forward(boardsize, input_planes, input_features,
-                     policy_out, finalscore_out, ownership_out, winrate_out);
+                     policy_out, scorebelief_out, ownership_out, finalscore_out, winrate_out);
 
   const auto result = Model::get_result(state,
                                         policy_out,
-                                        finalscore_out,
+                                        scorebelief_out,
                                         ownership_out,
+                                        finalscore_out,
                                         winrate_out,
                                         cfg_softmax_temp, symmetry);
 
@@ -168,15 +174,17 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
 }
 
 Network::Netresult
-Network::get_output(const GameState *const state, const Ensemble ensemble,
-                    const int symmetry, const bool read_cache,
+Network::get_output(const GameState *const state,
+                    const Ensemble ensemble,
+                    const int symmetry,
+                    const bool read_cache,
                     const bool write_cache) {
   Netresult result;
   //const size_t boardsize = state->board.get_boardsize();
   //const size_t intersections = boardsize * boardsize;
 
   if (read_cache) {
-    if (probe_cache(state, result)) {
+    if (probe_cache(state, result, symmetry)) {
       return result;
     }
   }

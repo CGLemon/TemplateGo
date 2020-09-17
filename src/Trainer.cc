@@ -1,7 +1,7 @@
 #include "Trainer.h"
 #include "Model.h"
 #include "Board.h"
-#include "cfg.h"
+#include "config.h"
 #include "Utils.h"
 #include "Random.h"
 
@@ -64,7 +64,7 @@ void Trainer::Step::step_stream(std::ostream &out) {
   }
   out << std::endl;
 
-  out << final_score;
+  out << final_score_idx;
   out << std::endl;
 
   for (auto &r : result) {
@@ -263,8 +263,13 @@ void Trainer::gather_winner(GameState &state) {
     }
     assert(step.ownership.size() == ownership.size());
 
-    step.final_score =
-        (step.to_move == Board::BLACK) ? distance : (-distance);
+    auto final_score_idx = 2 * (distance - state.board.get_komi_integer());
+    if (state.board.get_komi_float() > 0.0f) {
+      final_score_idx += 1;
+    }
+
+    step.final_score_idx =
+        (step.to_move == Board::BLACK) ? final_score_idx : (-final_score_idx);
   }
 
   const auto end = std::end(game_steps);

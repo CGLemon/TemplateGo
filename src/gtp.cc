@@ -1,6 +1,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <iomanip>
 
 #include "SGFstream.h"
 #include "Board.h"
@@ -47,14 +48,6 @@ void gtp::set_up(int argc, char **argv) {
   arg_parser(argc, argv);
   
   auto_printf("Warning! The program version is %s. Don't work well now.\n", PROGRAM_VERSION.c_str());
-}
-
-bool gtp::selfplay_command() {
-  if (cfg_selfplay_config != "_NO_CONFIG_FILE_" && cfg_selfplay_agent) {
-    return true;
-  }
-
-  return false;
 }
 
 void gtp::init_engine(GameState &state) {
@@ -147,9 +140,10 @@ bool gtp::gtp_execute(std::string input) {
     int size;
     cmd_stream >> size;
     if (!cmd_stream.fail()) {
-      float old_komi = state.board.get_komi();
+      float komi = state.board.get_komi();
+      int old_boardsize = state.board.get_boardsize();
       cfg_boardsize = size;
-      state.init_game(size, old_komi);
+      state.init_game(size, komi);
       gtp_printf("");
     } else {
       gtp_fail_printf("syntax not understood");
@@ -165,7 +159,7 @@ bool gtp::gtp_execute(std::string input) {
         cfg_komi = komi;
         state.board.set_komi(komi);
       } 
-      gtp_printf("komi %.2f >> %.2f", old_komi, cfg_komi);
+      gtp_printf("");
     } else {
       gtp_fail_printf("syntax not understood");
     }
@@ -190,6 +184,10 @@ bool gtp::gtp_execute(std::string input) {
     }
   } else if (cmd == "undo") {
     if (state.undo_move()) {
+      const auto komi = state.board.get_komi();
+      if (komi != cfg_komi) {
+        state.board.set_komi(cfg_komi);
+      }
       gtp_printf("");
     } else {
       gtp_fail_printf("cannot undo");
@@ -292,7 +290,7 @@ bool gtp::gtp_execute(std::string input) {
       engine->benchmark(cfg_playouts);
     } else {
       int playouts;
-      if (is_allnumber(playouts_str)) {
+      if (is_unsigned_integer(playouts_str)) {
         playouts = std::stoi(playouts_str);
       } else {
         playouts = cfg_playouts;
@@ -314,20 +312,111 @@ bool gtp::gtp_execute(std::string input) {
     const int res = state.board.get_movenum();
     gtp_printf("%d", res);
 
-  } else if (cmd == "auto") {
+  } else if (cmd == "get_eyes") {
+
+    auto out_stream = std::ostringstream{};
+    auto bsize = state.board.get_boardsize();
+
+    out_stream << "eyes index" << std::endl;
+
+    for (int y = 0; y < bsize; ++y) {
+      for (int x = 0; x < bsize; ++x) {
+         const auto vtx = state.board.get_vertex(x, y);
+         const auto color = state.board.get_state(vtx);
+         const auto eye = state.board.is_eye(vtx, Board::BLACK) ||
+                              state.board.is_eye(vtx, Board::WHITE);
+
+         out_stream << std::setw(2) << (int)eye;
+      }
+      if (y != bsize - 1) {
+        out_stream << std::endl;
+      }
+    }
+
+    auto res = out_stream.str();
+    gtp_printf("%s", res.c_str());
+
+  }  else if (cmd == "get_groups") {
+
+    auto groups = std::vector<int>{};
+    auto cnt = state.board.get_groups(groups);
+    auto out_stream = std::ostringstream{};
+    auto bsize = state.board.get_boardsize();
+    (void) cnt;
+
+    out_stream << "groups index" << std::endl;
+
+    for (int y = 0; y < bsize; ++y) {
+      for (int x = 0; x < bsize; ++x) {
+         const auto vtx = state.board.get_vertex(x, y);
+         out_stream << std::setw(2) << groups[vtx];
+      }
+      if (y != bsize - 1) {
+        out_stream << std::endl;
+      }
+    }
+
+    auto res = out_stream.str();
+    gtp_printf("%s", res.c_str());
+
+  } else if (cmd == "get_alive_groups") {
+
+    auto alive_groups = std::vector<int>{};
+    auto cnt = state.board.get_alive_groups(alive_groups);
+    auto out_stream = std::ostringstream{};
+    auto bsize = state.board.get_boardsize();
+    (void) cnt;
+
+    out_stream << "alive groups index" << std::endl;
+
+    for (int y = 0; y < bsize; ++y) {
+      for (int x = 0; x < bsize; ++x) {
+         const auto vtx = state.board.get_vertex(x, y);
+         out_stream << std::setw(2) << alive_groups[vtx];
+      }
+      if (y != bsize - 1) {
+        out_stream << std::endl;
+      }
+    }
+
+    auto res = out_stream.str();
+    gtp_printf("%s", res.c_str());
+
+  }  else if (cmd == "get_ownership") {
+
+    auto ownership = state.board.get_ownership();
+    auto out_stream = std::ostringstream{};
+    auto bsize = state.board.get_boardsize();
+
+    out_stream << "ownership index" << std::endl;
+
+    for (int y = 0; y < bsize; ++y) {
+      for (int x = 0; x < bsize; ++x) {
+         const auto idx = state.board.get_index(x, y);
+         out_stream << std::setw(2) << ownership[idx];
+      }
+      if (y != bsize - 1) {
+        out_stream << std::endl;
+      }
+    }
+
+    auto res = out_stream.str();
+    gtp_printf("%s", res.c_str());
+
+  }  else if (cmd == "auto") {
     while(!state.isGameOver()) {
       int move = engine->think(Search::strategy_t::NN_UCT);
       state.play_move(move);
 
       auto res = gtp_vertex_parser(move, state);
       auto_printf("move = %s\n", res.c_str());
-      state.display();
+      state.display(2);
     }
     engine->trainer->gather_winner(state);
 
     auto res = state.result_to_string();
     gtp_printf("%s", res.c_str());
-  } else if (cmd == "get_winner") {
+  } else if (cmd == "get-winner") {
     int winner = state.get_winner();
     if (winner == Board::BLACK) {
       gtp_printf("Black side is winner");
@@ -339,7 +428,7 @@ bool gtp::gtp_execute(std::string input) {
       gtp_printf("Game still is keeping");
     }
   } else if (cmd == "adjust-fair-komi"){
-    float fair_komi = static_cast<float>(engine->get_fair_komi());
+    float fair_komi = engine->get_fair_komi();
     float old_komi = state.board.get_komi();
     assert(old_komi == cfg_komi);
 
@@ -373,7 +462,7 @@ bool gtp::gtp_execute(std::string input) {
       engine->trainer->clear_game_steps();
       gtp_printf("");
     }
-  } else if (cmd=="nn-input-pattens"){
+  } else if (cmd =="nn-input-pattens"){
     auto res = Model::features_to_string(state);
     gtp_printf("%s", res.c_str());
 
@@ -386,6 +475,39 @@ bool gtp::gtp_execute(std::string input) {
       engine->evaluation->reload_network(fname);
       gtp_printf("");
     }
+  } else if (cmd == "label-komi") {
+    int komi;
+    cmd_stream >> komi;
+    if (!cmd_stream.fail()) {
+      int old_komi = cfg_lable_komi;
+      cfg_lable_komi = komi;
+
+      if (std::abs(cfg_lable_komi) > LABELS_CENTER && cfg_lable_komi > 0) {
+        cfg_lable_komi = LABELS_CENTER;
+      } else if (std::abs(cfg_lable_komi) > LABELS_CENTER && cfg_lable_komi < 0) {
+        cfg_lable_komi = -LABELS_CENTER;
+      }
+
+      gtp_printf("lable komi %d >> %d", old_komi, cfg_lable_komi);
+    } else {
+      gtp_fail_printf("syntax not understood");
+    }
+  } else if (cmd == "label-buffer") {
+    float buffer;
+    cmd_stream >> buffer;
+    if (!cmd_stream.fail()) {
+      auto old_buffer = cfg_label_buffer;
+      cfg_label_buffer = buffer;
+
+      if (cfg_label_buffer < 0.0f) {
+        cfg_label_buffer = 0.0f;
+      }
+
+      gtp_printf("lable buffer %f >> %f", old_buffer, cfg_label_buffer);
+    } else {
+      gtp_fail_printf("syntax not understood");
+    }
+
   } else if (cmd == "random-move") {
     std::string color;
     cmd_stream >> color;

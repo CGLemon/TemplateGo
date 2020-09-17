@@ -5,7 +5,6 @@
 #include "Search.h"
 #include "UCTNode.h"
 #include "Random.h"
-#include "cfg.h"
 
 using namespace Utils;
 
@@ -107,11 +106,15 @@ int Search::nn_direct_output() {
   }
   auto_printf(" pass : %.5f \n\n", eval.policy_pass);
 
-
-  auto_printf(" final score out : \n");
-  for (auto &s : eval.final_score) {
+  
+  auto_printf("score belief out : \n");
+  for (auto &s : eval.score_belief) {
     auto_printf("%.5f ", s);
   }
+  auto_printf("\n\n");
+
+  auto_printf("final score out : \n");
+  auto_printf("%.5f ", eval.final_score);
   auto_printf("\n\n");
 
 
@@ -123,9 +126,10 @@ int Search::nn_direct_output() {
       auto_printf("\n");
     }
   }
+
   auto_printf("\n\n");
   for (auto idx = size_t{0}; idx < VALUE_LABELS; idx++) {
-    const auto winrate = eval.winrate_lables[idx];
+    const auto winrate = eval.multi_labeled[idx];
     auto_printf("%f ", winrate);
   }
   auto_printf("\n");
@@ -133,6 +137,7 @@ int Search::nn_direct_output() {
   auto_printf(" NN eval = ");
   auto_printf("%f", eval.winrate);
   auto_printf("%\n");
+
   return out_vertex;
 }
 
@@ -207,16 +212,28 @@ void Search::updata_root(UCTNode *root_node) {
   eval *= 100.f;
   auto_printf("Root :\n");
   auto_printf(" NN eval = ");
-  auto_printf("%f%%\n", eval);
+  auto_printf("%f%%, ", eval);
 
-
-  auto score = nn_output->final_score;
+  
+  auto final_score = nn_output->final_score;
   if (to_move == Board::WHITE) {
-    score = 0 - score;
+    final_score = 0 - final_score;
+  }
+
+  auto score_belief = nn_output->score_belief;
+  if (to_move == Board::WHITE) {
+    score_belief = 0 - score_belief;
   }
 
   auto_printf(" NN final score = ");
-  auto_printf("%d\n", score);
+  auto_printf("%.2f,", final_score);
+  
+  auto_printf(" NN score belief = ");
+  auto_printf("%.2f,", score_belief);
+
+
+  auto_printf(" label komi = ");
+  auto_printf("%d\n", cfg_lable_komi + cfg_lable_shift);
 }
 
 bool check_release(size_t tot_sz, size_t sz, std::string name) {
@@ -225,7 +242,7 @@ bool check_release(size_t tot_sz, size_t sz, std::string name) {
     auto_printf("%s count = %zu\n", name.c_str(), (tot_sz/sz));
   } 
 
-  return (tot_sz == 0); 
+  return tot_sz == 0; 
 }
 
 bool Search::is_in_time(const float max_time) {
@@ -258,23 +275,12 @@ int Search::uct_search() {
   int select_move = Board::NO_VERTEX;
   bool keep_running = true;
   bool need_resign = false;
-  bool pass_win = Heuristic::pass_to_win(m_rootstate);
-  if (pass_win) {
 
-    if (cfg_ponder) {
-      m_rootstate.play_move(Board::PASS);
-      ponder_search();
-    }
-
-    m_trainer.gather_step(m_rootstate, Board::PASS);
-    return Board::PASS;
-  }
   const float thinking_time = m_rootstate.get_thinking_time();
-  auto_printf("Max thining time : %.4f seconds\n", thinking_time);
+  auto_printf("Max thinking time : %.4f seconds\n", thinking_time);
   
   m_timer.clock();
 
-  
   prepare_uct_search();
   updata_root(m_rootnode);
   
@@ -298,7 +304,7 @@ int Search::uct_search() {
 
   const auto seconds = m_timer.get_duration();
   const auto playouts = m_playouts.load();
-  auto_printf("Basic\n");
+  auto_printf("Basic :\n");
   auto_printf(" playouts : %d\n", playouts);
   auto_printf(" spent : %2.5f (seconds)\n", seconds);
   auto_printf(" speed : %2.5f (playouts/seconds) \n", (float)playouts / seconds );
@@ -309,12 +315,12 @@ int Search::uct_search() {
   need_resign = Heuristic::should_be_resign(m_rootstate, m_rootnode, cfg_resign_threshold);
  
   m_trainer.gather_step(m_rootstate, *m_rootnode);
+  m_rootnode->adjust_label_shift(nullptr);
   clear_nodes();
   
   assert(select_move != Board::NO_VERTEX);
 
   m_gamestate.recount_time(m_gamestate.board.get_to_move());
-
 
   if (need_resign) {
     select_move = Board::RESIGN;
@@ -334,8 +340,10 @@ int Search::select_best_move() {
   const int boardsize = m_rootstate.board.get_boardsize();
   const int intersections = boardsize * boardsize;
 
-  cfg_random_move_cnt = intersections / (boardsize + 5);  
-  if (cfg_random_move_cnt >= movenum && cfg_random_move) {
+  const int div = cfg_random_move_div > 1 ? cfg_random_move_div : 1;
+
+  cfg_random_move_cnt = intersections / div;  
+  if (movenum <= cfg_random_move_cnt && cfg_random_move) {
     select_move = m_rootnode->randomize_first_proportionally(1.0f);
   }
 

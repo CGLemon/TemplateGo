@@ -21,8 +21,8 @@ public:
   bool play_move(const int vtx, const int color);
   bool undo_move();
 
-  void display() const;
-  std::string display_to_string() const;
+  void display(const size_t strip = 0) const;
+  std::string display_to_string(const size_t strip = 0) const;
   std::string vertex_to_string(int vertex) const;
 
   bool play_textmove(std::string input);

@@ -25,8 +25,9 @@ public:
                        const std::vector<float> &planes,
                        const std::vector<float> &features,
                        std::vector<float> &output_pol,
-                       std::vector<float> &output_fs,
+                       std::vector<float> &output_sb,
                        std::vector<float> &output_os,
+                       std::vector<float> &output_fs,
                        std::vector<float> &output_val);
 
   virtual void reload(std::shared_ptr<Model::NNweights> weights);
@@ -64,9 +65,10 @@ private:
     // value head
     CudaConvolve value_conv;
     CudaBatchnorm value_bnorm;
-    CudaConvolve fs_conv;
+    CudaConvolve sb_conv;
     CudaConvolve os_conv;
-    CudaGlobalAvgPool winrate_gpool;
+    CudaGlobalAvgPool v_gpool;
+    CudaFullyConnect fs_fc;
     CudaFullyConnect winrate_fc;
 
 
@@ -88,8 +90,9 @@ private:
   std::array<float*, 2> cuda_val_op;
 
   float *cuda_output_pol;
-  float *cuda_output_fs;
+  float *cuda_output_sb;
   float *cuda_output_os;
+  float *cuda_output_fs;
   float *cuda_output_val;
 
 
@@ -97,6 +100,7 @@ private:
   std::mutex m_queue_mutex;
   std::condition_variable m_cv;
   std::atomic<int> m_waittime{0};
+  std::atomic<bool> m_narrow_pipe{false};
 
   struct ForwawrdEntry {
 
@@ -104,8 +108,9 @@ private:
 	const std::vector<float> &in_p;
     const std::vector<float> &in_f;
     std::vector<float> &out_pol;
-    std::vector<float> &out_fs;
+    std::vector<float> &out_sb;
     std::vector<float> &out_os;
+    std::vector<float> &out_fs;
     std::vector<float> &out_val;
     std::condition_variable cv;
     std::mutex mutex;
@@ -114,11 +119,12 @@ private:
                   const std::vector<float> &planes,
                   const std::vector<float> &features,
                   std::vector<float> &output_pol,
-                  std::vector<float> &output_fs,
+                  std::vector<float> &output_sb,
                   std::vector<float> &output_os,
+                  std::vector<float> &output_fs,
                   std::vector<float> &output_val) :
                   boardsize(bsize), in_p(planes), in_f(features),
-                  out_pol(output_pol), out_fs(output_fs), out_os(output_os), out_val(output_val) {}
+                  out_pol(output_pol), out_sb(output_sb), out_os(output_os), out_fs(output_fs), out_val(output_val) {}
   };
 
   std::list<std::shared_ptr<ForwawrdEntry>> m_forward_queue;
@@ -127,8 +133,9 @@ private:
                      std::vector<float> &planes,
                      std::vector<float> &features,
                      std::vector<float> &output_pol,
-                     std::vector<float> &output_fs,
+                     std::vector<float> &output_sb,
                      std::vector<float> &output_os,
+                     std::vector<float> &output_fs,
                      std::vector<float> &output_val);
 
  

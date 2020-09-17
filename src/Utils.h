@@ -24,7 +24,9 @@ void gtp_printf(const char *fmt, ...);
 
 void gtp_fail_printf(const char *fmt, ...);
 
-bool is_allnumber(std::string &number_str);
+bool is_integer(std::string &number_str);
+
+bool is_unsigned_integer(std::string &number_str);
 
 bool is_number(char);
 

@@ -1,6 +1,5 @@
 #ifdef USE_CUDA
 #include "CUDAbackend.h"
-#include "cfg.h"
 #include "config.h"
 #include "Utils.h"
 
@@ -9,9 +8,7 @@
 
 CUDAbackend::CUDAbackend() {
   auto_printf("Using CUDA network.\n");
-#ifndef NARROW_PIPE
   prepare_worker();
-#endif
 };
 
 CUDAbackend::~CUDAbackend() {
@@ -30,12 +27,11 @@ void CUDAbackend::initialize(std::shared_ptr<Model::NNweights> weights) {
   push_weights();
   cuda_gpu_info();
 
-  m_waittime.store(100);
+  m_waittime.store(cfg_waittime);
 }
 
 
 void CUDAbackend::reload(std::shared_ptr<Model::NNweights> weights) {
-  
   release();
   m_weights = weights;
   m_graph = std::make_shared<Graph>();
@@ -46,80 +42,58 @@ void CUDAbackend::forward(const int boardsize,
                           const std::vector<float> &planes,
                           const std::vector<float> &features,
                           std::vector<float> &output_pol,
-                          std::vector<float> &output_fs,
+                          std::vector<float> &output_sb,
                           std::vector<float> &output_os,
+                          std::vector<float> &output_fs,
                           std::vector<float> &output_val) {
-#ifdef NARROW_PIPE
-  std::unique_lock<std::mutex> lock(m_mutex);
-  const auto batch_size = size_t{1};
-  auto in_planes = planes;
-  auto in_features = features;
-  batch_forward(batch_size,
-                boardsize,
-                in_planes,
-                in_features,
-                output_pol,
-                output_fs,
-                output_os,
-                output_val);
+  if (cfg_batchsize == 1) {
+    std::unique_lock<std::mutex> lock(m_mutex);
+    const auto batch_size = size_t{1};
+    auto in_planes = planes;
+    auto in_features = features;
+    batch_forward(batch_size,
+                  boardsize,
+                  in_planes,
+                  in_features,
+                  output_pol,
+                  output_sb,
+                  output_os,
+                  output_fs,
+                  output_val);
+  } else {
+    auto entry = std::make_shared<ForwawrdEntry>(boardsize,
+                                                 planes,
+                                                 features,
+                                                 output_pol,
+                                                 output_sb,
+                                                 output_os,
+                                                 output_fs,
+                                                 output_val);
 
-#else
-  auto entry = std::make_shared<ForwawrdEntry>(boardsize,
-                                               planes,
-                                               features,
-                                               output_pol,
-                                               output_fs,
-                                               output_os,
-                                               output_val);
-
-  std::unique_lock<std::mutex> lock(entry->mutex);
-  {
-    std::unique_lock<std::mutex> m_lock(m_queue_mutex);
-    m_forward_queue.emplace_back(entry);
+    std::unique_lock<std::mutex> lock(entry->mutex);
+    {
+      std::unique_lock<std::mutex> queue_lock(m_queue_mutex);
+      m_forward_queue.emplace_back(entry);
+    }
+    if (m_forward_queue.size() >= cfg_batchsize) {
+      m_cv.notify_one();
+    }
+    entry->cv.wait(lock);
   }
-
-  if (m_forward_queue.size() >= cfg_batchsize) {
-    m_cv.notify_one();
-  }
-  entry->cv.wait(lock);
-
-#endif
 }
 
 void CUDAbackend::prepare_worker() {
-
   m_thread_running = true;
-
-  if (m_threads.size() == 0) {
-    m_threads.emplace_back([this](){
-      size_t miss_cnt = 0;
-      while(true) {
-        {
-          std::unique_lock<std::mutex> lock(m_mutex);
-          int waittime = m_waittime.load();
-          bool timeout = !m_cv.wait_for(lock, std::chrono::milliseconds(waittime),
-                                        [this](){
-                                          return m_forward_queue.size() >= 1;
-                                        });
-          if (!m_thread_running.load()) {
-            return;
-          }
-          if (timeout) {
-            miss_cnt++;
-          } else {
-            miss_cnt = 0;
-          }
-          int next_waittime = 100 + 20 * miss_cnt;
-          m_waittime.store(next_waittime);
-        }
-        worker();
-      }
-    });
+  if (m_threads.size() == 0 && cfg_batchsize > 1) {
+    m_threads.emplace_back([this](){ worker(); });
   }
 }
 
 void CUDAbackend::quit_worker() {
-  m_thread_running = false;
+  {
+    std::unique_lock<std::mutex> queue_lock(m_queue_mutex);
+    m_thread_running = false;
+  }
   m_cv.notify_all();
   for (auto &t : m_threads) {
     t.join();
@@ -129,14 +103,38 @@ void CUDAbackend::quit_worker() {
 void CUDAbackend::worker() {
 
   const auto gether_batches = [this](){
-    std::unique_lock<std::mutex> m_lock(m_queue_mutex);
+    std::list<std::shared_ptr<ForwawrdEntry>> inputs;
+    
+    while(true) {
+      if (!m_thread_running) return inputs;
 
-    size_t count = m_forward_queue.size();
+      if (m_forward_queue.size() >= cfg_batchsize) {
+        m_waittime.store(cfg_waittime);
+        break;
+      }
+
+      std::unique_lock<std::mutex> lock(m_mutex);
+      int waittime = m_waittime.load();
+      bool timeout = m_cv.wait_for(lock, std::chrono::milliseconds(waittime),
+                                       [this](){ return m_forward_queue.size() < cfg_batchsize; }
+                                  );
+      if (!m_forward_queue.empty()) {
+        if (timeout && m_narrow_pipe.exchange(true) == false) {
+          if (waittime > 1) {
+            waittime--;
+            m_waittime.store(waittime);
+          }
+          break;
+        }
+      }
+    }
+    std::unique_lock<std::mutex> queue_lock(m_queue_mutex);
+
+    auto count = m_forward_queue.size();
     if (count > cfg_batchsize) {
       count = cfg_batchsize;
     }
-    std::list<std::shared_ptr<ForwawrdEntry>> inputs;
-  
+
     auto end = std::begin(m_forward_queue);
     std::advance(end, count);
     std::move(std::begin(m_forward_queue), end, std::back_inserter(inputs));
@@ -145,67 +143,82 @@ void CUDAbackend::worker() {
     return inputs;
   };
 
-  auto gether_entry = gether_batches();
-  const auto batch_size = gether_entry.size();
-  if (batch_size == 0) {
-    return;
-  }
-  
-  const auto first = *std::begin(gether_entry);
-  const auto boardsize = first->boardsize;
 
-  const auto in_p_size = first->in_p.size();
-  const auto in_f_size = first->in_f.size();
+  while (true) {
+    if (!m_thread_running) return;
 
-  const auto out_pol_size = first->out_pol.size();
-  const auto out_fs_size = first->out_fs.size();
-  const auto out_os_size = first->out_os.size();
-  const auto out_val_size = first->out_val.size();
+    auto gether_entry = gether_batches();
+    const auto batch_size = gether_entry.size();
 
-  auto batch_input_planes = std::vector<float>(batch_size * in_p_size);
-  auto batch_input_features = std::vector<float>(batch_size * in_f_size);
-  auto batch_out_pol = std::vector<float>(batch_size * out_pol_size);
-  auto batch_out_fs = std::vector<float>(batch_size * out_fs_size);
-  auto batch_out_os = std::vector<float>(batch_size * out_os_size);
-  auto batch_out_val = std::vector<float>(batch_size * out_val_size);
+    if (batch_size == 0) {
+      continue;
+    }
 
-  auto index = size_t{0};
-  for (auto &x : gether_entry) {
-    std::copy(std::begin(x->in_p),
-              std::end(x->in_p),
-              std::begin(batch_input_planes) + index * in_p_size);
-    std::copy(std::begin(x->in_f),
-              std::end(x->in_f),
-              std::begin(batch_input_features) + index * in_f_size);
-    index++;
-  }
+    const auto first = *std::begin(gether_entry);
+    const auto boardsize = first->boardsize;
 
-  batch_forward(batch_size,
-                boardsize,
-                batch_input_planes,
-                batch_input_features,
-                batch_out_pol,
-                batch_out_fs,
-                batch_out_os,
-                batch_out_val);
+    const auto in_p_size = first->in_p.size();
+    const auto in_f_size = first->in_f.size();
+
+    const auto out_pol_size = first->out_pol.size();
+    const auto out_sb_size = first->out_sb.size();
+    const auto out_os_size = first->out_os.size();
+    const auto out_fs_size = first->out_fs.size();
+    const auto out_val_size = first->out_val.size();
+
+    auto batch_input_planes = std::vector<float>(batch_size * in_p_size);
+    auto batch_input_features = std::vector<float>(batch_size * in_f_size);
+    auto batch_out_pol = std::vector<float>(batch_size * out_pol_size);
+    auto batch_out_sb = std::vector<float>(batch_size * out_sb_size);
+    auto batch_out_os = std::vector<float>(batch_size * out_os_size);
+    auto batch_out_fs = std::vector<float>(batch_size * out_fs_size);
+    auto batch_out_val = std::vector<float>(batch_size * out_val_size);
+
+    auto index = size_t{0};
+    for (auto &x : gether_entry) {
+      std::copy(std::begin(x->in_p),
+                std::end(x->in_p),
+                std::begin(batch_input_planes) + index * in_p_size);
+      std::copy(std::begin(x->in_f),
+                std::end(x->in_f),
+                std::begin(batch_input_features) + index * in_f_size);
+      index++;
+    }
+
+    batch_forward(batch_size,
+                  boardsize,
+                  batch_input_planes,
+                  batch_input_features,
+                  batch_out_pol,
+                  batch_out_sb,
+                  batch_out_os,
+                  batch_out_fs,
+                  batch_out_val);
 
 
-  index = 0;
-  for (auto &x : gether_entry) {
-    std::copy(std::begin(batch_out_pol) + index * out_pol_size,
-              std::begin(batch_out_pol) + (index+1) * out_pol_size,
-              std::begin(x->out_pol));
-    std::copy(std::begin(batch_out_fs) + index * out_fs_size,
-              std::begin(batch_out_fs) + (index+1) * out_fs_size,
-              std::begin(x->out_fs));
-    std::copy(std::begin(batch_out_os) + index * out_os_size,
-              std::begin(batch_out_os) + (index+1) * out_os_size,
-              std::begin(x->out_os));
-    std::copy(std::begin(batch_out_val) + index * out_val_size,
-              std::begin(batch_out_val) + (index+1) * out_val_size,
-              std::begin(x->out_val));
-    x->cv.notify_all();
-    index++;
+    index = 0;
+    for (auto &x : gether_entry) {
+      std::copy(std::begin(batch_out_pol) + index * out_pol_size,
+                std::begin(batch_out_pol) + (index+1) * out_pol_size,
+                std::begin(x->out_pol));
+      std::copy(std::begin(batch_out_sb) + index * out_sb_size,
+                std::begin(batch_out_sb) + (index+1) * out_sb_size,
+                std::begin(x->out_sb));
+      std::copy(std::begin(batch_out_os) + index * out_os_size,
+                std::begin(batch_out_os) + (index+1) * out_os_size,
+                std::begin(x->out_os));
+      std::copy(std::begin(batch_out_fs) + index * out_fs_size,
+                std::begin(batch_out_fs) + (index+1) * out_fs_size,
+                std::begin(x->out_fs));
+      std::copy(std::begin(batch_out_val) + index * out_val_size,
+                std::begin(batch_out_val) + (index+1) * out_val_size,
+                std::begin(x->out_val));
+      x->cv.notify_all();
+      index++;
+    }
+    if (batch_size <= cfg_batchsize) {
+      m_narrow_pipe.store(false);
+    }
   }
 }
 
@@ -214,8 +227,9 @@ void CUDAbackend::batch_forward(const int batch_size,
                                 std::vector<float> &planes,
                                 std::vector<float> &features,
                                 std::vector<float> &output_pol,
-                                std::vector<float> &output_fs,
+                                std::vector<float> &output_sb,
                                 std::vector<float> &output_os,
+                                std::vector<float> &output_fs,
                                 std::vector<float> &output_val) {
 
   const size_t intersections = boardsize * boardsize;
@@ -269,6 +283,7 @@ void CUDAbackend::batch_forward(const int batch_size,
     m_graph->
     tower_se[i].Forward(batch, cuda_conv_temp[2], cuda_conv_temp[0], &handel);
   }
+
   // policy head
   m_graph->
   poliy_conv.Forward(batch, cuda_conv_temp[0], cuda_pol_op[0],
@@ -295,15 +310,18 @@ void CUDAbackend::batch_forward(const int batch_size,
   value_bnorm.Forward(batch, cuda_val_op[0]);
 
   m_graph->
-  fs_conv.Forward(batch, cuda_val_op[0], cuda_output_fs,
-                  cuda_scratch, m_scratch_size, &handel); // final score
+  sb_conv.Forward(batch, cuda_val_op[0], cuda_output_sb,
+                  cuda_scratch, m_scratch_size, &handel); // score belief
 
   m_graph->
   os_conv.Forward(batch, cuda_val_op[0], cuda_output_os,
                   cuda_scratch, m_scratch_size, &handel); // ownership
 
   m_graph->
-  winrate_gpool.Forward(batch, cuda_val_op[0], cuda_val_op[1]);
+  v_gpool.Forward(batch, cuda_val_op[0], cuda_val_op[1]);
+
+  m_graph->
+  fs_fc.Forward(batch, cuda_val_op[1], cuda_output_fs, &handel); // final score
 
   m_graph->
   winrate_fc.Forward(batch, cuda_val_op[1], cuda_output_val, &handel); // winrate
@@ -316,9 +334,11 @@ void CUDAbackend::batch_forward(const int batch_size,
 
   const size_t output_pass_s = batch * 1 * type_s;
 
-  const size_t output_fs_s = batch * (2 * intersections) * type_s;
+  const size_t output_sb_s = batch * OUTPUTS_SCOREBELIEF * intersections * type_s;
 
-  const size_t output_os_s = batch * intersections * type_s;
+  const size_t output_os_s = batch * OUTPUTS_OWNERSHIP * intersections * type_s;
+
+  const size_t output_fs_s = batch * FINAL_SCORE * type_s;
 
   const size_t output_winrate_s = batch * VALUE_LABELS * type_s;
 
@@ -328,10 +348,13 @@ void CUDAbackend::batch_forward(const int batch_size,
   ReportCUDAErrors(cudaMemcpy(temp_pass.data(), cuda_pol_op[3],
                               output_pass_s, cudaMemcpyDeviceToHost));
 
-  ReportCUDAErrors(cudaMemcpy(output_fs.data(), cuda_output_fs,
-                              output_fs_s, cudaMemcpyDeviceToHost));
+  ReportCUDAErrors(cudaMemcpy(output_sb.data(), cuda_output_sb,
+                              output_sb_s, cudaMemcpyDeviceToHost));
   ReportCUDAErrors(cudaMemcpy(output_os.data(), cuda_output_os,
                               output_os_s, cudaMemcpyDeviceToHost));
+  ReportCUDAErrors(cudaMemcpy(output_fs.data(), cuda_output_fs,
+                              output_fs_s, cudaMemcpyDeviceToHost));
+ 
   ReportCUDAErrors(cudaMemcpy(output_val.data(), cuda_output_val,
                               output_winrate_s, cudaMemcpyDeviceToHost));
 
@@ -360,12 +383,23 @@ void CUDAbackend::release() {
     ReportCUDAErrors(cudaFree(cuda_input_planes));
     ReportCUDAErrors(cudaFree(cuda_input_features));
 
-    ReportCUDAErrors(cudaFree(cuda_output_pol));
-    ReportCUDAErrors(cudaFree(cuda_output_val));
-
     ReportCUDAErrors(cudaFree(cuda_conv_temp[0]));
     ReportCUDAErrors(cudaFree(cuda_conv_temp[1]));
     ReportCUDAErrors(cudaFree(cuda_conv_temp[2]));
+
+    ReportCUDAErrors(cudaFree(cuda_pol_op[0]));
+    ReportCUDAErrors(cudaFree(cuda_pol_op[1]));
+    ReportCUDAErrors(cudaFree(cuda_pol_op[2]));
+    ReportCUDAErrors(cudaFree(cuda_pol_op[3]));
+
+    ReportCUDAErrors(cudaFree(cuda_val_op[0]));
+    ReportCUDAErrors(cudaFree(cuda_val_op[1]));
+
+    ReportCUDAErrors(cudaFree(cuda_output_pol));
+    ReportCUDAErrors(cudaFree(cuda_output_sb));
+    ReportCUDAErrors(cudaFree(cuda_output_os));
+    ReportCUDAErrors(cudaFree(cuda_output_fs));
+    ReportCUDAErrors(cudaFree(cuda_output_val));
 
     m_scratch_size = 0;
 
@@ -447,14 +481,20 @@ void CUDAbackend::push_weights() {
   value_bnorm = CudaBatchnorm(conv_size, max_batchsize, OUTPUTS_VALUE);
 
   m_graph->
-  fs_conv = CudaConvolve(conv_size, max_batchsize, filter_1,
-                         OUTPUTS_VALUE, OUTPUTS_FINALSCORE);
+  sb_conv = CudaConvolve(conv_size, max_batchsize, filter_1,
+                         OUTPUTS_VALUE, OUTPUTS_SCOREBELIEF);
   m_graph->
   os_conv = CudaConvolve(conv_size, max_batchsize, filter_1,
                          OUTPUTS_VALUE, OUTPUTS_OWNERSHIP);
 
   m_graph->
-  winrate_gpool = CudaGlobalAvgPool(conv_size, max_batchsize, OUTPUTS_VALUE);
+  v_gpool = CudaGlobalAvgPool(conv_size, max_batchsize, OUTPUTS_VALUE);
+
+  m_graph->
+  fs_fc = CudaFullyConnect(max_batchsize,
+                           OUTPUTS_VALUE,
+                           FINAL_SCORE,
+                           false);
 
   m_graph->
   winrate_fc = CudaFullyConnect(max_batchsize,
@@ -525,12 +565,16 @@ void CUDAbackend::push_weights() {
                             m_weights->v_bn.stddevs);
 
   m_graph->
-  fs_conv.LoadingWeight(m_weights->fs_conv.weights,
+  sb_conv.LoadingWeight(m_weights->sb_conv.weights,
                         m_scratch_size);
 
   m_graph->
   os_conv.LoadingWeight(m_weights->os_conv.weights,
                         m_scratch_size);
+
+  m_graph->
+  fs_fc.LoadingWeight(m_weights->fs_fc.weights,
+                      m_weights->fs_fc.biases);
 
   m_graph->
   winrate_fc.LoadingWeight(m_weights->v_fc.weights,
@@ -573,11 +617,14 @@ void CUDAbackend::push_weights() {
   const size_t output_pol_s =
       max_batchsize * POTENTIAL_MOVES * type_s;
 
-  const size_t output_fs_s =
-      max_batchsize * OUTPUTS_FINALSCORE * intersections * type_s;
+  const size_t output_sb_s =
+      max_batchsize * OUTPUTS_SCOREBELIEF * intersections * type_s;
 
   const size_t output_os_s =
       max_batchsize * OUTPUTS_OWNERSHIP * intersections * type_s;
+
+  const size_t output_fs_s =
+      max_batchsize * FINAL_SCORE  * type_s;
 
   const size_t output_val_s =
       max_batchsize * VALUE_LABELS * type_s;
@@ -598,8 +645,9 @@ void CUDAbackend::push_weights() {
   ReportCUDAErrors(cudaMalloc(&cuda_val_op[1], val_op2_s));
 
   ReportCUDAErrors(cudaMalloc(&cuda_output_pol, output_pol_s));
-  ReportCUDAErrors(cudaMalloc(&cuda_output_fs, output_fs_s));
+  ReportCUDAErrors(cudaMalloc(&cuda_output_sb, output_sb_s));
   ReportCUDAErrors(cudaMalloc(&cuda_output_os, output_os_s));
+  ReportCUDAErrors(cudaMalloc(&cuda_output_fs, output_fs_s));
   ReportCUDAErrors(cudaMalloc(&cuda_output_val, output_val_s));
 
 #ifdef USE_CUDNN
@@ -638,9 +686,9 @@ void CUDAbackend::Graph::set_boardsize(int bsize) {
 
   value_conv.set_convsize(bsize);
   value_bnorm.set_convsize(bsize);
-  fs_conv.set_convsize(bsize);
+  sb_conv.set_convsize(bsize);
   os_conv.set_convsize(bsize);
-  winrate_gpool.set_convsize(bsize);
+  v_gpool.set_convsize(bsize);
 }
 
 #endif

@@ -14,6 +14,7 @@
 #include "UCTNode.h"
 #include "Trainer.h"
 #include "Utils.h"
+#include "config.h"
 
 class SearchResult {
 public:
@@ -27,7 +28,8 @@ public:
 
   void from_score(GameState &state) {
     m_nn_outout = std::make_shared<NNOutputBuffer>();
-    const auto board_score = state.final_score();
+    const auto addtion_komi = cfg_lable_komi + cfg_lable_shift;
+    const auto board_score = state.final_score(addtion_komi);
 
     if (board_score > 0.0f) {
       m_nn_outout->eval = 1.0f;
@@ -37,11 +39,15 @@ public:
       m_nn_outout->eval = 0.5f;
     }
 
-    m_nn_outout->final_score = state.board.area_distance(); // komi is zero
+    m_nn_outout->score_belief = board_score;
+
+    m_nn_outout->final_score = board_score;
     
     const auto ownership = state.board.get_ownership();
     const auto o_size = ownership.size();
-    m_nn_outout->ownership = std::vector<float>(o_size, 0.0f);
+    m_nn_outout->ownership = std::array<float, NUM_INTERSECTIONS>{};
+    m_nn_outout->ownership.fill(0.0f);
+
     for (auto idx = size_t{0}; idx < o_size; ++idx) {
       const auto owner =  ownership[idx];
       if (owner == Board::BLACK) {

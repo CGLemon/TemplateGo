@@ -28,9 +28,7 @@
 #define WHITE_EYE_MASK (4 * (1 << WHITE_NBR_SHIFT))
 
 static_assert(sizeof(std::uint64_t) == 8, "");
-/*
-/ TODO: 增加征子的判斷（ 為了支援 KataGo ）
-*/
+
 
 class Board {
 public:
@@ -39,7 +37,10 @@ public:
       Jappanese 
   };
 
-  enum class avoid_t { NONE, REAL_EYE };
+  enum class avoid_t { 
+      NONE,
+      SEARCH_BLOCK
+  };
 
   // Ladder helper
   enum class ladder_t {
@@ -47,6 +48,7 @@ public:
       GOOD_FOR_PREY,
       GOOD_FOR_NONE,
   };
+
   static constexpr size_t MAX_LADDER_NODES = 2000;
 
   enum vertex_t : std::uint8_t {
@@ -105,6 +107,7 @@ public:
   std::string spcaces_to_string(const int times) const;
   std::string columns_to_string(const int bsize) const;
 
+  void info_stream(std::ostream &out) const;
   void tomove_stream(std::ostream &out) const;
   void hash_stream(std::ostream &out) const;
   void prisoners_stream(std::ostream &out) const;
@@ -135,22 +138,29 @@ public:
   int get_transform_vtx(const int vtx, const int sym = IDENTITY_SYMMETRY) const;
   int get_passes() const;
   int get_movenum() const;
+  int get_komi_integer() const;
+  float get_komi_float() const;
   float get_komi() const;
 
+  int get_stones(const int x, const int y) const;
+  int get_stones(const int vtx) const;
   int get_libs(const int x, const int y) const;
   int get_libs(const int vtx) const;
   int get_komove() const;
 
   std::vector<int> get_ownership() const;
+  int get_groups(std::vector<int> &groups) const;
+  int get_alive_groups(std::vector<int> &alive_groups) const;
+  std::vector<int> get_alive_seki(const int color) const;
 
   std::uint64_t get_ko_hash() const;
   std::uint64_t get_hash() const;
   /*
     =====================================================================
   */
-
-  std::uint64_t calc_hash(int komove, int sym = IDENTITY_SYMMETRY);
-  std::uint64_t calc_ko_hash(int sym = IDENTITY_SYMMETRY);
+  std::uint64_t komi_hash() const;
+  std::uint64_t calc_hash(int komove, int sym = IDENTITY_SYMMETRY) const;
+  std::uint64_t calc_ko_hash(int sym = IDENTITY_SYMMETRY) const;
 
   void set_passes(int val);
   void increment_passes();
@@ -162,20 +172,24 @@ public:
   int count_pliberties(const int vtx) const;
   bool is_superko_move(const int vtx, const int color, 
                        std::uint64_t *super_ko_history) const;
-  bool is_real_eye(const int vtx, const int color) const;
+  bool is_take_move(const int vtx, const int color) const;
+  bool is_eye(const int vtx, const int color) const;
   bool is_simple_eye(const int vtx, const int color) const;
   bool is_suicide(const int vtx, const int color) const;
 
   void play_move(const int vtx, const int color);
   void play_move(const int vtx);
-  bool is_legal(const int vtx, const int color,
-                std::uint64_t *superko_history = nullptr,
+  bool is_legal(const int vtx,
+                const int color,
                 avoid_t avoid = avoid_t::NONE) const;
-  bool is_avoid_to_move(avoid_t, const int vtx, const int color) const;
+  bool is_avoid_move(avoid_t, const int vtx, const int color) const;
+
+  int collect_group(const int spread_center, const int spread_color,
+                    std::vector<bool>& bd, std::function<int(int)> f_peek) const;
 
   int calc_reach_color(int color) const;
   int calc_reach_color(int color, int spread_color,
-                       std::vector<bool>& bd, std::function<int(int)> f_peek) const;
+                       std::vector<bool>& buf, std::function<int(int)> f_peek) const;
   float area_score(float komi, rule_t = rule_t::Tromp_Taylor) const;
   int area_distance() const;
 
@@ -269,7 +283,7 @@ private:
   int m_komi_integer;
   float m_komi_float;
 
-  bool is_in_board(const int vtx);
+  bool is_in_board(const int vtx) const;
   void init_symmetry_table(const int boardsize);
   void init_dirs(const int boardsize);
   void init_bitboard(const int numvertices);

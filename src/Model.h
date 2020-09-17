@@ -22,9 +22,10 @@ static constexpr auto OUTPUTS_PRBAOBILITIES = 1;
 static constexpr auto OUTPUTS_PASS = 1;
 
 static constexpr auto OUTPUTS_VALUE = 64;
-static constexpr auto OUTPUTS_FINALSCORE = 2;
+static constexpr auto OUTPUTS_SCOREBELIEF = 4;
 static constexpr auto OUTPUTS_OWNERSHIP = 1;
 
+static constexpr auto FINAL_SCORE = 1;
 static constexpr auto VALUE_LABELS = 21;
 static constexpr auto LABELS_CENTER = 10;
 static constexpr auto POTENTIAL_MOVES = NUM_INTERSECTIONS + 1;
@@ -94,8 +95,9 @@ struct Model {
     Desc::ConvLayer v_conv;
     Desc::BatchNormLayer v_bn;
 
-    Desc::ConvLayer fs_conv;
+    Desc::ConvLayer sb_conv;
     Desc::ConvLayer os_conv;
+    Desc::LinearLayer fs_fc;
     Desc::LinearLayer v_fc;
 
   };
@@ -108,8 +110,9 @@ struct Model {
                          const std::vector<float> &planes,
                          const std::vector<float> &features,
                          std::vector<float> &output_pol,
-                         std::vector<float> &output_fs,
+                         std::vector<float> &output_sb,
                          std::vector<float> &output_os,
+                         std::vector<float> &output_fs,
                          std::vector<float> &output_val) = 0;
 
     virtual void reload(std::shared_ptr<Model::NNweights> weights) = 0;
@@ -132,11 +135,14 @@ struct Model {
 
   static NNResult get_result(const GameState *const state,
                              std::vector<float> &policy,
-                             std::vector<float> &final_score,
+                             std::vector<float> &score_belief,
                              std::vector<float> &ownership,
+                             std::vector<float> &final_score,
                              std::vector<float> &value,
                              const float softmax_temp,
                              const int symmetry);
+
+  static NNResult get_result_form_cache(NNResult result);
 
   static void winograd_transform(std::shared_ptr<NNweights> &nn_weight);
 

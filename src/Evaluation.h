@@ -25,7 +25,7 @@ public:
 
   void release_nn();
 
-  int get_fair_komi(GameState &state);
+  float get_fair_komi(GameState &state);
 
 private:
   Network m_network;

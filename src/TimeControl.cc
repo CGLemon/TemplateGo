@@ -1,5 +1,5 @@
 #include "TimeControl.h"
-#include "cfg.h"
+#include "config.h"
 
 #include <iomanip>
 #include <cassert>
@@ -44,6 +44,11 @@ void TimeControl::reset() {
   check_in_byo();
 }
 
+void TimeControl::time_stream(std::ostream &out) const {
+  time_stream(out, Board::BLACK);
+  out << " | ";
+  time_stream(out, Board::WHITE);
+}
 
 void TimeControl::time_stream(std::ostream &out, int color) const {
   assert(color == Board::BLACK || color == Board::WHITE);

@@ -12,8 +12,9 @@ public:
                        const std::vector<float> &planes,
                        const std::vector<float> &binary,
                        std::vector<float> &output_pol,
-                       std::vector<float> &output_fs,
+                       std::vector<float> &output_sb,
                        std::vector<float> &output_os,
+                       std::vector<float> &output_fs,
                        std::vector<float> &output_val);
 
   virtual void reload(std::shared_ptr<Model::NNweights> weights);

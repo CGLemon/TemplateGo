@@ -2,7 +2,7 @@
 #include "Board.h"
 #include "Random.h"
 #include "Utils.h"
-#include "cfg.h"
+#include "config.h"
 
 #include <algorithm>
 #include <cassert>
@@ -172,32 +172,27 @@ UCTNode *Edge::get_node() const {
 size_t UCTNode::node_tree_size = 0;
 
 UCTNode::UCTNode(std::shared_ptr<DataBuffer> data) {
-
   m_data = data;
-
   increment_tree_size(sizeof(UCTNode));
+  m_accumulated_black_ownership.fill(0.0f);
 }
 
 UCTNode::~UCTNode() {
   decrement_tree_size(sizeof(UCTNode));
+  if (m_black_nn_output) {
+    //decrement_tree_size(sizeof(NNOutputBuffer));
+  }
+
   assert(m_loading_threads.load() == 0);
 }
 
-bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
-                              std::shared_ptr<NNOutputBuffer> &nn_output, float min_psa_ratio, bool kill_superkos) {
 
+
+bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
+                              std::shared_ptr<NNOutputBuffer> &nn_output, float min_psa_ratio, const bool is_root) {
 
   // 防止無效的父節點產生，每個父節點至少要一個子節點
   assert(state.board.get_passes() < 2);
-  /*
-  if (state.board.get_passes() >= 2) {
-    return false;
-  }
-
-  if (is_expending()) {
-    return false;
-  }
-  */
 
   if (!acquire_expanding()) {
     return false;
@@ -205,54 +200,21 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
   const size_t boardsize = state.board.get_boardsize();
   const size_t intersections = boardsize * boardsize;
 
-  const auto raw_netlist =
+  auto raw_netlist =
       evaluation.network_eval(state, Network::Ensemble::RANDOM_SYMMETRY);
 
-  const float stm_eval = raw_netlist.winrate;
-  const auto to_move = state.board.get_to_move();
-
-  m_color = to_move;
-
-  // 將網路輸出裝填進 buffer
-  m_black_nn_output = std::make_shared<NNOutputBuffer>();
-  if (to_move == Board::WHITE) {
-    m_black_nn_output->eval = 1.0f - stm_eval;
-  } else {
-    m_black_nn_output->eval = stm_eval;
+  if (is_root) {
+    adjust_label_shift(&raw_netlist, cfg_label_buffer);
   }
 
-  float max_score_prob = std::numeric_limits<float>::lowest();
-  int max_final_score = std::numeric_limits<int>::lowest();
-  for (auto idx = size_t{0}; idx < 2 * intersections; ++idx) {
-    if (max_score_prob < raw_netlist.final_score[idx]) {
-      max_score_prob = raw_netlist.final_score[idx];
-      max_final_score = static_cast<int>(idx);
-    }
-  }
+  m_color = state.board.get_to_move();
 
-  max_final_score -= intersections;
-  if (to_move == Board::WHITE) { 
-    m_black_nn_output->final_score = 0 - max_final_score;
-  } else {
-    m_black_nn_output->final_score = max_final_score;
-  }
+  link_output_buffer(state, raw_netlist, nn_output, m_color);
 
-  m_black_nn_output->ownership.reserve(intersections);
-  m_black_nn_output->ownership.resize(intersections);
-
-  for (auto idx = size_t{0}; idx < intersections; ++idx) {
-    const float ownership = raw_netlist.ownership[idx];
-
-    if (to_move == Board::WHITE) {
-      m_black_nn_output->ownership[idx] = 0.0f - ownership;
-    } else {
-      m_black_nn_output->ownership[idx] = ownership;
-    }
-  }
-  nn_output = m_black_nn_output;
-
+  // 以下搜尋可行的下法，在根節點會禁止一些我們不希望下法
   std::vector<Network::PolicyVertexPair> nodelist;
 
+  bool allow_pass = true;
   float legal_accumulate = 0.0f;
   int legal_count = 0;
   for (auto i = size_t{0}; i < intersections; i++) {
@@ -260,15 +222,33 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
     const int y = i / boardsize;
     const auto vertex = state.board.get_vertex(x, y);
     const auto policy = raw_netlist.policy[i];
-    if (state.board.is_legal(vertex, to_move)) {
-      if (kill_superkos) {
+
+    if (state.board.is_legal(vertex, m_color, is_root == true ?
+            Board::avoid_t::SEARCH_BLOCK : Board::avoid_t::NONE)) {
+      if (is_root) {
 	    auto smi_state = std::make_shared<GameState>(state);
+        bool take_move = smi_state->board.is_take_move(vertex, m_color);
+        bool eye_move = smi_state->board.is_eye(vertex, m_color);
+
 	    if (!smi_state->play_move(vertex)) {
 	      continue;
 	    }
+
+        // 如果在根節點，檢查所有的棋避免有重複盤面，如果是相同的盤面，禁止此手
         if (smi_state->superko()) { 
           continue;
 	    }
+
+        if (take_move) {
+          // 如果有可以吃的棋子，禁止 pass
+          allow_pass = false;
+        } else if (eye_move) {
+          // 如果此手棋會讓對方提吃，且被提吃的棋太多（10顆以上，棋子數目較少的場合可能是為了殺對方而下出），禁止此手
+          // 自填眼睛時才判斷，因為其他場合有可能是為了打劫，但自填眼睛而被提吃純屬無意義自殺
+          if (smi_state->board.get_libs(vertex) == 1 && smi_state->board.get_stones(vertex) >= 10) {
+            continue;
+          }
+        }
       }
       nodelist.emplace_back(policy, vertex);
       legal_accumulate += policy;
@@ -277,9 +257,28 @@ bool UCTNode::expend_children(Evaluation &evaluation, GameState &state,
   }
   assert(cfg_allow_pass_ratio != 0.0f);
 
-  if (legal_count <= (intersections * cfg_allow_pass_ratio) || legal_accumulate <= 0.0f) {
+  if (is_root && allow_pass) {
+    // 如果有尚未倍佔據的領地，禁止 pass （雙活除外）
+    auto alive_seki = state.board.get_alive_seki(m_color);
+    allow_pass = alive_seki.empty();
+  }
+
+
+  if (allow_pass && (legal_count <= (intersections * cfg_allow_pass_ratio) || legal_accumulate <= 0.0f)) {
+    if (Heuristic::pass_to_win(state)) {
+      // 如果 pass 獲勝，就不用考慮其他節點
+      nodelist.clear();
+      legal_accumulate = 0.0f;
+      legal_count = 0;
+    }
+    
     nodelist.emplace_back(raw_netlist.policy_pass, Board::PASS);
     legal_accumulate += raw_netlist.policy_pass;
+
+    if (legal_accumulate <= 0.0f && !nodelist.empty()) {
+      // 避免 pass 被的 policy 為 0 導致的 bug
+      legal_accumulate = 1.0f;
+    }
   }
 
   assert(legal_accumulate != 0.0f);
@@ -311,6 +310,71 @@ void UCTNode::link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
     }
   }
   assert(!m_children.empty());
+}
+
+void UCTNode::link_output_buffer(GameState &state, const Evaluation::NNeval &raw_netlist,
+                                 std::shared_ptr<NNOutputBuffer> &nn_output, const int color){
+  if (m_black_nn_output) {
+    return;
+  } 
+  m_black_nn_output = std::make_shared<NNOutputBuffer>();
+  //increment_tree_size(sizeof(NNOutputBuffer));
+
+  const size_t intersections = state.board.get_intersections();
+
+  // 將網路輸出裝填進 buffer
+  const auto stm_eval = raw_netlist.winrate;
+  if (color == Board::WHITE) {
+    m_black_nn_output->eval = 1.0f - stm_eval;
+  } else {
+    m_black_nn_output->eval = stm_eval;
+  }
+
+  // score belief
+  float max_scorebelief_prob = std::numeric_limits<float>::lowest();
+  int max_scorebelief_idx = std::numeric_limits<int>::lowest();
+
+  for (auto idx = size_t{0}; idx < 4 * intersections; ++idx) {
+    if (max_scorebelief_prob < raw_netlist.score_belief[idx]) {
+      max_scorebelief_prob = raw_netlist.score_belief[idx];
+      max_scorebelief_idx = static_cast<int>(idx);
+    }
+  }
+
+  max_scorebelief_idx -= 2 * intersections;
+  const auto score_belief = (float)max_scorebelief_idx * 0.5f; 
+  if (color == Board::WHITE) {
+    m_black_nn_output->score_belief = 0.0f - score_belief;
+  } else {
+    m_black_nn_output->score_belief = score_belief;
+  }
+
+  // ownership
+  m_black_nn_output->ownership.fill(0.0f);
+  for (auto idx = size_t{0}; idx < intersections; ++idx) {
+    const float ownership = raw_netlist.ownership[idx];
+
+    if (color == Board::WHITE) {
+      m_black_nn_output->ownership[idx] = 0.0f - ownership;
+    } else {
+      m_black_nn_output->ownership[idx] = ownership;
+    }
+  }
+
+  // final score
+  if (color == Board::WHITE) {
+    m_black_nn_output->final_score = 0.0f - raw_netlist.final_score;
+  } else {
+    m_black_nn_output->final_score = raw_netlist.final_score;
+  }
+
+  nn_output = m_black_nn_output;
+}
+
+void UCTNode::link_output_buffer(std::shared_ptr<NNOutputBuffer> nn_output) {
+  assert(nn_output && !m_black_nn_output);
+  m_black_nn_output = nn_output;
+  //increment_tree_size(sizeof(NNOutputBuffer));
 }
 
 float UCTNode::get_raw_evaluation(int color) const {
@@ -355,9 +419,28 @@ int UCTNode::get_threads() const {
 
 int UCTNode::get_virtual_loss() const {
   const int threads = get_threads();
-  const int virtual_loss = threads * threads * VIRTUAL_LOSS_COUNT;
+  const int virtual_loss = threads * VIRTUAL_LOSS_COUNT;
  
   return virtual_loss;
+}
+
+
+const float UCTNode::get_final_score(const int color) const {
+  const auto visits = get_visits();
+  const auto final_score = m_accumulated_black_finalscore.load() / visits;
+  if (color == Board::BLACK) {
+    return final_score;
+  }
+  return 0.0f - final_score;
+}
+
+const float UCTNode::get_score_belief(const int color) const {
+  const auto visits = get_visits();
+  const auto score_belief = m_accumulated_black_scorebelief.load() / visits;
+  if (color == Board::BLACK) {
+    return score_belief;
+  }
+  return 0.0f - score_belief;
 }
 
 float UCTNode::get_eval(int color, bool use_virtual_loss) const {
@@ -366,7 +449,7 @@ float UCTNode::get_eval(int color, bool use_virtual_loss) const {
     virtual_loss = 0;
   }
 
-  int visits = m_visits + virtual_loss;
+  int visits = get_visits() + virtual_loss;
   assert(visits >= 0);
   float accumulated_evals = get_accumulated_evals();
   if (color == Board::WHITE) {
@@ -543,8 +626,20 @@ UCTNode *UCTNode::get_child(const int vtx) {
   return res->get_node();
 }
 
-const std::vector<float>& UCTNode::get_ownership() const {
-  return m_black_nn_output->ownership;
+std::array<float, NUM_INTERSECTIONS> UCTNode::get_ownership(int color) const {
+  auto visits = get_visits();
+  auto ownership = m_accumulated_black_ownership;
+  for (auto &owner : ownership) {
+    owner /= visits;
+  }
+
+  if (color == Board::WHITE) {
+    for (auto &owner : ownership) {
+      owner = 0.0f - owner;
+    }
+  }
+
+  return ownership;
 }
 
 const std::vector<std::shared_ptr<Edge>>& UCTNode::get_children() const {
@@ -565,31 +660,41 @@ void UCTNode::update(std::shared_ptr<NNOutputBuffer> nn_output) {
   float old_visits = m_visits.load();
   float old_delta = old_visits > 0 ? eval - old_eval / old_visits : 0.0f;
   m_visits++;
-  accumulate_eval(eval);
+  Utils::atomic_add(m_accumulated_black_evals, eval);
+
   float new_delta = eval - (old_eval + eval) / (old_visits + 1);
   // Welford's online algorithm for calculating variance.
   float delta = old_delta * new_delta;
   Utils::atomic_add(m_squared_eval_diff, delta);
 
+  const float final_score = nn_output->final_score;
+  Utils::atomic_add(m_accumulated_black_finalscore, final_score);
+
+  const float score_belief = nn_output->score_belief;
+  Utils::atomic_add(m_accumulated_black_scorebelief, score_belief);
+
   bool success = wait_update();
   if (success) {
-    if (m_black_nn_output && m_black_nn_output != nn_output) {
-      const size_t o_size = nn_output->ownership.size();
-      for (auto idx = size_t{0}; idx < o_size; ++idx) {
-        const auto owner = nn_output->ownership[idx];
-        m_black_nn_output->ownership[idx] += owner;
-      }
+    // 如果 m_black_nn_output 不存在，代表此節點為 pass
+    if (!m_black_nn_output) {
+      link_output_buffer(nn_output);
     }
 
+    const size_t o_size = nn_output->ownership.size();
+    for (auto idx = size_t{0}; idx < o_size; ++idx) {
+      const auto owner = nn_output->ownership[idx];
+      m_accumulated_black_ownership[idx] += owner;
+    }
     update_done();
   }
 }
 
-void UCTNode::prepare_root_node(Evaluation &evaluation, GameState &state, std::shared_ptr<NNOutputBuffer> &nn_output) {
+void UCTNode::prepare_root_node(Evaluation &evaluation, GameState &state,
+                                std::shared_ptr<NNOutputBuffer> &nn_output) {
 
-  const bool kill_superkos = true;
+  const bool is_root = true;
 
-  bool success = expend_children(evaluation, state, nn_output, 0.0f, kill_superkos);
+  bool success = expend_children(evaluation, state, nn_output, 0.0f, is_root);
   bool had_childen = has_children();
   assert(success && had_childen);
 
@@ -601,6 +706,69 @@ void UCTNode::prepare_root_node(Evaluation &evaluation, GameState &state, std::s
       dirichlet_noise(0.25f, alpha);
     }
   }
+}
+
+void UCTNode::adjust_label_shift(Evaluation::NNeval *raw_netlist, float shift_buffer) {
+
+  cfg_lable_shift = 0;
+  if (!raw_netlist) {
+    return;
+  }
+
+  int label_choice = LABELS_CENTER + cfg_lable_komi + cfg_lable_shift;
+  if (label_choice < 0) {
+    label_choice = 0;
+  } else if (label_choice >= VALUE_LABELS) {
+    label_choice = VALUE_LABELS - 1;
+  } 
+
+  auto current_winrate =  raw_netlist->multi_labeled[label_choice];
+  if (current_winrate > 0.5f) {
+    while (current_winrate - 0.5f > shift_buffer) {
+      cfg_lable_shift++;
+      label_choice = LABELS_CENTER + cfg_lable_komi + cfg_lable_shift;
+      if (label_choice >= VALUE_LABELS) {
+        cfg_lable_shift--;
+        break;
+      }
+      float next_winrate =  raw_netlist->multi_labeled[label_choice];
+      if (0.5f - next_winrate > current_winrate - 0.5f && next_winrate < 0.5f) {
+        cfg_lable_shift--;
+        break;
+      }
+
+      if (next_winrate  < 0.5f && current_winrate < 0.5f) {
+        cfg_lable_shift--;
+        break;
+      }
+      current_winrate =  raw_netlist->multi_labeled[label_choice];
+    }
+
+  } else if (current_winrate < 0.5f) {
+    while (0.5f - current_winrate > shift_buffer) {
+      cfg_lable_shift--;
+      label_choice = LABELS_CENTER + cfg_lable_komi + cfg_lable_shift;
+      if (label_choice < 0) {
+        cfg_lable_shift++;
+        break;
+      }
+      float next_winrate =  raw_netlist->multi_labeled[label_choice];
+      if (next_winrate  - 0.5f > 0.5f - current_winrate && next_winrate > 0.5f) {
+        cfg_lable_shift++;
+        break;
+      }
+
+      if (next_winrate  > 0.5f && current_winrate > 0.5f) {
+        cfg_lable_shift++;
+        break;
+      }
+      current_winrate =  raw_netlist->multi_labeled[label_choice];
+    }
+  }
+
+  label_choice = LABELS_CENTER + cfg_lable_komi + cfg_lable_shift;
+  assert(label_choice >= 0 && label_choice < VALUE_LABELS);
+  raw_netlist->winrate = raw_netlist->multi_labeled[label_choice];
 }
 
 bool UCTNode::has_children() const { 
@@ -803,19 +971,14 @@ size_t UCT_Information::get_memory_used() {
 void UCT_Information::dump_ownership(GameState &state, UCTNode *node) {
   const auto boardsize = state.board.get_boardsize();
   const auto color = state.board.get_to_move();
-  const auto ownership = node->get_ownership();
-  const auto visits = node-> get_visits() + 1;
+  const auto ownership = node->get_ownership(color);
 
   Utils::auto_printf("Ownership : \n");
   for (int y = 0; y < boardsize; ++y) {
     Utils::auto_printf(" ");
     for (int x = 0; x < boardsize; ++x) {
       const auto idx = state.board.get_index(x, y);
-      const auto black_owner = (ownership[idx] / (float)visits + 1.0f) / 2.0f;
-      auto owner = black_owner;
-      if (color == Board::WHITE) {
-        owner = 1.0f - owner;
-      }
+      const auto owner = (ownership[idx] + 1.0f) / 2.0f;
       Utils::auto_printf("%.4f ", owner);
     }
     Utils::auto_printf("\n");
@@ -848,12 +1011,26 @@ void UCT_Information::tree_stats() {
 void UCT_Information::dump_stats(GameState &state, UCTNode *node, int cut_off) {
   const auto color = state.board.get_to_move();
   const auto lcblist = node->get_lcb_list(color);
-  const auto parentsVisits = static_cast<float>(node->get_visits());
+  const auto parents_visits = static_cast<float>(node->get_visits());
   assert(color == node->get_color());
 
   dump_ownership(state, node);
+  const auto add_komi = [](const float komi, const int color) {
+    if (color == Board::BLACK) {
+      return 0.f - komi;
+    }
+    return komi;
+  };
 
-  Utils::auto_printf("Search List\n"); 
+  const auto komi = state.board.get_komi();
+  const auto root_ownership = node->get_ownership(color);
+  Utils::auto_printf("Search List :\n"); 
+  Utils::auto_printf("Root -> %7d (V: %5.2f%%) (S: %5.2f | %5.2f | %5.2f)\n",
+                     node->get_visits(),
+                     node->get_eval(color, false) * 100.f,
+                     node->get_final_score(color), node->get_score_belief(color),
+                     std::accumulate(std::begin(root_ownership), std::end(root_ownership), add_komi(komi, color)));
+
   int push = 0;
   for (auto &lcb : lcblist) {
     const auto lcb_value = lcb.first > 0.0f ? lcb.first : 0.0f;
@@ -861,20 +1038,27 @@ void UCT_Information::dump_stats(GameState &state, UCTNode *node, int cut_off) {
     
     auto child = node->get_child(vtx);
     const auto visits = child->get_visits();
-    const auto pobability = child->get_policy();
+    //const auto pobability = child->get_policy();
     assert(visits != 0);
     
     const auto eval = child->get_eval(color, false);
     const auto move = state.vertex_to_string(vtx);
     const auto pv_string = move + " " + pv_to_srting(child, state);
-    const float visit_ratio = static_cast<float>(visits) / parentsVisits;
-    Utils::auto_printf("%4s -> %7d (V: %5.2f%%) (LCB: %5.2f%%) (N: %5.2f%%) (P: %5.2f%%) PV: %s\n", 
+    const auto visit_ratio = static_cast<float>(visits) / parents_visits;
+    const auto final_score = child->get_final_score(color);
+    const auto score_belief = child->get_score_belief(color);
+    const auto ownership = child->get_ownership(color);
+    auto owner_sum =
+      std::accumulate(std::begin(ownership), std::end(ownership), add_komi(komi, color));
+
+    Utils::auto_printf("%4s -> %7d (V: %5.2f%%) (LCB: %5.2f%%) (N: %5.2f%%) (S: %5.2f | %5.2f | %5.2f) PV: %s\n", 
                         move.c_str(),
                         visits,
                         eval * 100.f, 
                         lcb_value * 100.f,
                         visit_ratio * 100.f,
-                        pobability * 100.f,
+                        //pobability * 100.f,
+                        final_score, score_belief, owner_sum,
                         pv_string.c_str());
 
     push++;
@@ -912,7 +1096,8 @@ void UCT_Information::collect_nodes() {
 bool Heuristic::pass_to_win(GameState &state) {
   if (state.board.get_last_move() == Board::PASS) {
     const auto color = state.board.get_to_move();
-    const auto res = state.final_score();
+    const auto addition_komi = cfg_lable_komi + cfg_lable_shift;
+    const auto res = state.final_score(addition_komi);
     if (color == Board::BLACK && res > 0.f) {
       return true;
     } else if (color == Board::WHITE && res < 0.f) {

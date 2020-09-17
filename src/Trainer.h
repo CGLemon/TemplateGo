@@ -37,7 +37,7 @@ private:
 
     std::vector<int> ownership;
 
-    int final_score;
+    int final_score_idx;
 
     std::vector<float> result;
 

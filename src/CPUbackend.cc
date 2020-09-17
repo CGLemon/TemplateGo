@@ -7,8 +7,9 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
              const  std::vector<float> &planes,
              const  std::vector<float> &features,
              std::vector<float> &output_pol,
-             std::vector<float> &output_fs,
+             std::vector<float> &output_sb,
              std::vector<float> &output_os,
+             std::vector<float> &output_fs,
              std::vector<float> &output_val) {
 
   using batchnorm = Batchnorm<BSIZE>;
@@ -68,6 +69,7 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
     convolve_3::Forward(input_channels, tower_channels, conv_in,
                         tower_ptr->conv_1.weights,
                         winograd_V, winograd_M, conv_out);
+
     batchnorm::Forward(tower_channels, conv_out,
                        tower_ptr->bn_1.means,
                        tower_ptr->bn_1.stddevs);
@@ -134,10 +136,10 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
   batchnorm::Forward(OUTPUTS_VALUE, value_conv, 
                      m_weights->v_bn.means,
                      m_weights->v_bn.stddevs);
-  // final_score
-  convolve_1::Forward(OUTPUTS_VALUE, OUTPUTS_FINALSCORE, value_conv, 
-                      m_weights->fs_conv.weights,
-                      output_fs);
+  // score belief
+  convolve_1::Forward(OUTPUTS_VALUE, OUTPUTS_SCOREBELIEF, value_conv, 
+                      m_weights->sb_conv.weights,
+                      output_sb);
   // ownership
   convolve_1::Forward(OUTPUTS_VALUE, OUTPUTS_OWNERSHIP, value_conv, 
                       m_weights->os_conv.weights,
@@ -146,6 +148,14 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
   globalpool::Forward(OUTPUTS_VALUE,
                       value_conv,
                       value_pool);
+
+  // final score
+  FullyConnect::Forward(OUTPUTS_VALUE, FINAL_SCORE,
+                        value_pool, 
+                        m_weights->fs_fc.weights,
+                        m_weights->fs_fc.biases, 
+                        output_fs, false);
+
 
   // winrate
   FullyConnect::Forward(OUTPUTS_VALUE, VALUE_LABELS,
@@ -156,13 +166,14 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
 }
 };
 
-#define CASE_PIPE(BSIZE)                                         \
-case BSIZE:                                                      \
-  {                                                              \
-    auto pipe = FORWARD_PIPE<BSIZE>();                           \
-    pipe.forward(m_weights, planes, features,                    \
-                output_pol, output_fs, output_os, output_val);   \
-  }                                                              \
+#define CASE_PIPE(BSIZE)                            \
+case BSIZE:                                         \
+  {                                                 \
+    auto pipe = FORWARD_PIPE<BSIZE>();              \
+    pipe.forward(m_weights, planes, features,       \
+                output_pol, output_sb,              \
+                output_os, output_fs, output_val);  \
+  }                                                 \
   break; 
 
 CPUbackend::CPUbackend() {}
@@ -184,8 +195,9 @@ void CPUbackend::forward(const int boardsize,
                          const std::vector<float> &planes,
                          const std::vector<float> &features,
                          std::vector<float> &output_pol,
-                         std::vector<float> &output_fs,
+                         std::vector<float> &output_sb,
                          std::vector<float> &output_os,
+                         std::vector<float> &output_fs,
                          std::vector<float> &output_val) {
 
   switch (boardsize) {

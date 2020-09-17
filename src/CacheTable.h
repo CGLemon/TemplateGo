@@ -11,22 +11,22 @@
 
 #include "config.h"
 
-
 struct NNResult {
-  NNResult() : policy_pass(0.0f), winrate(0.0f) {
+  NNResult() : winrate(0.0f), policy_pass(0.0f), final_score(0.0f) {
     policy.fill(0.0f);
-    final_score.fill(0.0f);
+    score_belief.fill(0.0f);
     ownership.fill(0.0f);
-    winrate_lables.fill(0.0f);
+    multi_labeled.fill(0.0f);
   }
 
   std::array<float, NUM_INTERSECTIONS> policy;
-  std::array<float, NUM_INTERSECTIONS * 2> final_score;
+  std::array<float, NUM_INTERSECTIONS * 4> score_belief;
   std::array<float, NUM_INTERSECTIONS> ownership;
-  std::array<float, 21> winrate_lables;
+  std::array<float, 21> multi_labeled;
 
   float winrate;
   float policy_pass;
+  float final_score;
 };
 
 template <typename EvalResult>

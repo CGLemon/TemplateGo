@@ -99,7 +99,7 @@ void Model::fill_weights(std::istream &weights_file,
 
   const size_t input_cnt = 5;
   const size_t single_tower_lines_cnt = 10;
-  const size_t head_cnt = 13;
+  const size_t head_cnt = 15;
 
   const size_t res_cnt = line_cnt - head_cnt - input_cnt;
   const size_t residuals = res_cnt / single_tower_lines_cnt;
@@ -135,26 +135,26 @@ void Model::fill_weights(std::istream &weights_file,
     fill_fullyconnect_layer(tower_ptr->extend, weights_file);
     fill_fullyconnect_layer(tower_ptr->squeeze, weights_file);
   }
-  // policy
+  // policy head
   fill_convolution_layer(nn_weight->p_conv, weights_file);
   fill_batchnorm_layer(nn_weight->p_bn, weights_file);
 
   fill_convolution_layer(nn_weight->prob_conv, weights_file);
   fill_fullyconnect_layer(nn_weight->pass_fc, weights_file);
 
-  // value
+  // value head
   fill_convolution_layer(nn_weight->v_conv, weights_file);
   fill_batchnorm_layer(nn_weight->v_bn, weights_file);
  
-  fill_convolution_layer(nn_weight->fs_conv, weights_file);
+  fill_convolution_layer(nn_weight->sb_conv, weights_file);
   fill_convolution_layer(nn_weight->os_conv, weights_file);
+  fill_fullyconnect_layer(nn_weight->fs_fc, weights_file);
   fill_fullyconnect_layer(nn_weight->v_fc, weights_file);
 
   weights = get_weights_from_file(weights_file);
   assert(weights.size() == 0);
 
   nn_weight->loaded = true;
-
 }
 
 std::pair<int, int> get_intersections_pair(int idx, int boardsize) {
@@ -381,8 +381,9 @@ std::string Model::features_to_string(GameState &state) {
 
 NNResult Model::get_result(const GameState *const state,
                            std::vector<float> &policy,
-                           std::vector<float> &final_score,
+                           std::vector<float> &score_belief,
                            std::vector<float> &ownership,
+                           std::vector<float> &final_score,
                            std::vector<float> &value,
                            const float softmax_temp,
                            const int symmetry) {
@@ -399,26 +400,49 @@ NNResult Model::get_result(const GameState *const state,
   }
   result.policy_pass = probabilities[intersections];
 
-  // Final score
-  const auto score = Activation::Softmax(final_score, softmax_temp);
-  for (auto idx = size_t{0}; idx < OUTPUTS_FINALSCORE * intersections; ++idx) {
-    result.final_score[idx] = score[idx];
+  // Score belief
+  const auto score = Activation::Softmax(score_belief, softmax_temp);
+  for (auto idx = size_t{0}; idx < OUTPUTS_SCOREBELIEF * intersections; ++idx) {
+    result.score_belief[idx] = score[idx];
   }
-
+  
   // Ownership
   for (auto idx = size_t{0}; idx < intersections; ++idx) {
     const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
     result.ownership[sym_idx] = std::tanh(ownership[idx]);
   }
-  
+
+  // Final score
+  result.final_score = 20 * final_score[0];
 
   // Map TanH output range [-1..1] to [0..1] range
   for (auto idx = size_t{0}; idx < VALUE_LABELS; ++idx) {
     const auto winrate = (1.0f + std::tanh(value[idx])) / 2.0f;
-    result.winrate_lables[idx] = winrate;
+    result.multi_labeled[idx] = winrate;
   }
 
-  result.winrate = result.winrate_lables[LABELS_CENTER];
+  int label_choice = LABELS_CENTER + cfg_lable_komi + cfg_lable_shift;
+  if (label_choice < 0) {
+    label_choice = 0;
+  } else if (label_choice >= VALUE_LABELS) {
+    label_choice = VALUE_LABELS - 1;
+  }
+
+  result.winrate = result.multi_labeled[label_choice];
+
+  return result;
+}
+
+NNResult Model::get_result_form_cache(NNResult result) {
+  // 依據當前的動態貼目選擇新的勝率
+  int label_choice = LABELS_CENTER + cfg_lable_komi + cfg_lable_shift;
+  if (label_choice < 0) {
+    label_choice = 0;
+  } else if (label_choice >= VALUE_LABELS) {
+    label_choice = VALUE_LABELS - 1;
+  }
+
+  result.winrate = result.multi_labeled[label_choice];
 
   return result;
 }

@@ -4,7 +4,7 @@
 #include "Evaluation.h"
 #include "Search.h"
 #include "Trainer.h"
-#include "cfg.h"
+#include "config.h"
 #include "GameState.h"
 
 #include <memory>
@@ -22,7 +22,7 @@ struct Engine {
 
   GameState& get_state();
 
-  int get_fair_komi();
+  float get_fair_komi();
 
   int think(Search::strategy_t stg);
 

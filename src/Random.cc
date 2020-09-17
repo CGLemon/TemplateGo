@@ -1,5 +1,5 @@
 #include "Random.h"
-#include "cfg.h"
+#include "config.h"
 #include <chrono>
 
 

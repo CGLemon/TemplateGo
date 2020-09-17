@@ -27,6 +27,7 @@ public:
   bool is_overtime(int color) const;
   float get_thinking_time(int color, int boardsize, int num_move) const;  
 
+  void time_stream(std::ostream &out) const;
   void time_stream(std::ostream &out, int color) const;
   void set_time_left(int color, int main_time, int byo_time);
 

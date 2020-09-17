@@ -1,4 +1,4 @@
-#include "config.h"
+#include "Utils.h"
 
 #include <cstdarg>
 #include <cstdio>
@@ -6,8 +6,6 @@
 #include <iostream>
 #include <mutex>
 
-#include "Utils.h"
-#include "cfg.h"
 
 /*
 z_lookup 由下代碼產生，需要 boost 庫
@@ -200,7 +198,22 @@ void Utils::gtp_fail_printf(const char *fmt, ...) {
   va_end(ap);
 }
 
-bool Utils::is_allnumber(std::string &number_str) {
+bool Utils::is_integer(std::string &number_str) {
+  const size_t size = number_str.size();
+  for (auto i = size_t{0}; i < size; ++i) {
+    const char res = number_str[i];
+    if (i == 0 && res == '-') {
+      continue;
+    }
+
+    if (!is_number(res)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+bool Utils::is_unsigned_integer(std::string &number_str) {
   const size_t size = number_str.size();
   for (auto i = size_t{0}; i < size; ++i) {
     const char res = number_str[i];

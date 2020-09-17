@@ -24,8 +24,10 @@ struct DataBuffer {
 
 struct NNOutputBuffer {
   float eval;
-  int final_score;
-  std::vector<float> ownership;
+  float final_score;
+  float score_belief;
+
+  std::array<float, NUM_INTERSECTIONS> ownership;
 };
 
 
@@ -132,10 +134,9 @@ public:
   ~UCTNode();
 
   bool expend_children(Evaluation &evaluation, GameState &state,
-                       std::shared_ptr<NNOutputBuffer> &nn_output, float min_psa_ratio, bool kill_superkos = false);
+                       std::shared_ptr<NNOutputBuffer> &nn_output, float min_psa_ratio, const bool is_root = false);
 
-  void link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
-                     float min_psa_ratio);
+  void adjust_label_shift(Evaluation::NNeval *raw_netlist, float shift_buffer = 0.5f);
 
   float get_raw_evaluation(int color) const;
   float get_accumulated_evals() const;
@@ -188,9 +189,21 @@ public:
   std::vector<std::pair<float, int>> get_lcb_list(const int color);
   std::vector<std::pair<float, int>> get_winrate_list(const int color);
 
-  const std::vector<float>& get_ownership() const;
+  std::array<float, NUM_INTERSECTIONS> get_ownership(const int color) const;
 
-private:
+  const float get_final_score(const int color) const;
+
+  const float get_score_belief(const int color) const;  
+
+private: 
+  void link_nodelist(std::vector<Network::PolicyVertexPair> &nodelist,
+                     float min_psa_ratio);
+
+  void link_output_buffer(GameState &state, const Evaluation::NNeval &raw_netlist,
+                          std::shared_ptr<NNOutputBuffer> &nn_output, const int color);
+
+  void link_output_buffer(std::shared_ptr<NNOutputBuffer> nn_output);
+
   std::shared_ptr<DataBuffer> m_data;
 
   enum Status : std::uint8_t { 
@@ -210,6 +223,12 @@ private:
 
   std::atomic<float> m_accumulated_black_evals{0.0}; // 黑方經樹搜索累積的 Q 值
 
+  std::atomic<float> m_accumulated_black_scorebelief{0.0f};
+
+  std::atomic<float> m_accumulated_black_finalscore{0.0f};
+
+  std::array<float, NUM_INTERSECTIONS> m_accumulated_black_ownership;
+
   std::vector<std::shared_ptr<Edge>> m_children;
 
   std::atomic<int> m_loading_threads{0}; // 此結點下包含的 thread 數目
@@ -222,7 +241,6 @@ private:
   };
 
   std::atomic<ExpandState> m_expand_state{ExpandState::INITIAL};
-
 
   bool acquire_update();
 

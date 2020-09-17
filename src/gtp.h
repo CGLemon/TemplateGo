@@ -5,7 +5,7 @@
 
 #include "GameState.h"
 #include "Zobrist.h"
-#include "cfg.h"
+#include "config.h"
 #include "Engine.h"
 
 namespace gtp {

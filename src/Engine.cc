@@ -26,7 +26,7 @@ void Engine::clear_state() {
   evaluation->clear_cache();
 }
 
-int Engine::get_fair_komi() {
+float Engine::get_fair_komi() {
   return evaluation->get_fair_komi(m_state);
 }
 

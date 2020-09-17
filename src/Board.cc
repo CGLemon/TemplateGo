@@ -2,12 +2,13 @@
 #include <memory>
 #include <queue>
 #include <vector>
+#include <iomanip>
 #include <algorithm>
+#include <cstring>
 
 #include "Board.h"
 #include "Utils.h"
 #include "Zobrist.h"
-#include "cfg.h"
 #include "config.h"
 
 using namespace Utils;
@@ -58,7 +59,7 @@ std::uint64_t Board::BitBoard::make_bit(const int idx) {
 }
 
 void Board::Chain::reset_chain() {
-  for (int vtx = 0; vtx < NUM_VERTICES + 1; vtx++) {
+  for (int vtx = 0; vtx < NUM_VERTICES + 1; ++vtx) {
     parent[vtx] = NUM_VERTICES;
     next[vtx] = NUM_VERTICES;
     stones[vtx] = 0;
@@ -235,11 +236,17 @@ void Board::set_boardsize(int boardsize) {
 }
 
 void Board::set_komi(const float komi) {
+  const auto old_k_hash = komi_hash();
+  
   m_komi_integer = static_cast<int>(komi);
   m_komi_float = komi - static_cast<float>(m_komi_integer);
   if (m_komi_float < 0.01f && m_komi_float > (-0.01f)) {
     m_komi_float = 0.0f;
   }
+  const auto new_k_hash = komi_hash();
+
+  m_hash ^= old_k_hash;
+  m_hash ^= new_k_hash;
 }
 
 void Board::reset_board_data() {
@@ -319,15 +326,26 @@ bool Board::is_star(const int x, const int y) const {
   return hits >= 2;
 }
 
+void Board::info_stream(std::ostream &out) const {
+  out << "{";
+  out << "Board Size : "   << std::setw(2) << m_boardsize              << ", ";
+  out << "Komi : "         << std::setw(2) << get_komi()               << ", ";
+  out << "Label Komi : "   << std::setw(2) << cfg_lable_komi           << ", ";
+  out << "Label Buffer : " << std::setw(2) << cfg_label_buffer * 100.f << "%";
+  out << "}\n";
+}
+
 void Board::tomove_stream(std::ostream &out) const {
+
+  out << "Next player : ";
   if (m_tomove == Board::BLACK) {
-    out << "Black to move";
+    out << "Black";
     out << "\n";
   } else if (m_tomove == Board::WHITE) {
-    out << "White to move";
+    out << "White";
     out << "\n";
   } else {
-    out << "Error to move";
+    out << "Error";
     out << "\n";
   }
 }
@@ -436,7 +454,14 @@ void Board::text_display() {
   auto_printf("%s\n", res.c_str());
 }
 
-std::uint64_t Board::calc_hash(int komove, int sym) {
+std::uint64_t Board::komi_hash() const {
+  auto komi_hash = std::uint64_t{0};
+  auto komi = get_komi();
+  std::memcpy(&komi_hash, &komi, sizeof(komi));
+  return komi_hash;
+}
+
+std::uint64_t Board::calc_hash(int komove, int sym) const {
   std::uint64_t res = calc_ko_hash(sym);
   res ^= Zobrist::zobrist_ko[get_transform_vtx(komove, sym)];
   res ^= Zobrist::zobrist_pris[BLACK][m_prisoners[BLACK]];
@@ -448,8 +473,9 @@ std::uint64_t Board::calc_hash(int komove, int sym) {
   return res;
 }
 
-std::uint64_t Board::calc_ko_hash(int sym) {
+std::uint64_t Board::calc_ko_hash(int sym) const {
   std::uint64_t res = Zobrist::zobrist_empty;
+  res ^= komi_hash();
   for (int vtx = 0; vtx < m_numvertices; vtx++) {
     if (is_in_board(vtx)) {
       res ^= Zobrist::zobrist[m_state[vtx]][get_transform_vtx(vtx, sym)];
@@ -512,11 +538,33 @@ bool Board::is_superko_move(const int vtx, const int color,
   return false;
 }
 
+bool Board::is_take_move(const int vtx, const int color) const {
+  
+  if (m_state[vtx] != EMPTY) {
+    return false;
+  }
+
+  for (int k = 0; k < 4; ++k) {
+    const int avtx = vtx + m_dirs[k];
+    const int ip = m_string.parent[avtx];
+    const int libs = m_string.libs[ip];
+    
+    if (m_state[avtx] == !color && libs == 1) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Board::is_simple_eye(const int vtx, const int color) const {
   return m_neighbours[vtx] & s_eyemask[color];
 }
 
-bool Board::is_real_eye(const int vtx, const int color) const {
+bool Board::is_eye(const int vtx, const int color) const {
+  
+  if (m_state[vtx] != EMPTY) {
+    return false;
+  }
 
   if (!is_simple_eye(vtx, color)) {
     return false;
@@ -538,7 +586,7 @@ bool Board::is_real_eye(const int vtx, const int color) const {
       return false;
     }
   } else {
-    if (colorcount[!color]) {
+    if (colorcount[!color] > 0) {
       return false;
     }
   }
@@ -759,8 +807,8 @@ void Board::play_move(const int vtx, const int color) {
   exchange_to_move();
 }
 
-bool Board::is_legal(const int vtx, const int color,
-                     std::uint64_t *superko_history,
+bool Board::is_legal(const int vtx,
+                     const int color,
                      Board::avoid_t avoid) const {
 
   if (vtx == PASS || vtx == RESIGN) {
@@ -771,7 +819,7 @@ bool Board::is_legal(const int vtx, const int color,
     return false;
   }
 
-  if (is_avoid_to_move(avoid, vtx, color)) {
+  if (is_avoid_move(avoid, vtx, color)) {
     return false;
   }
 
@@ -785,11 +833,6 @@ bool Board::is_legal(const int vtx, const int color,
     return false;
   }
 
-  if (cfg_pre_block_superko && superko_history) {
-    if (is_superko_move(vtx, color, superko_history)) {
-      return false;
-    }
-  }
   return true;
 }
 
@@ -801,6 +844,41 @@ int Board::calc_reach_color(int color) const {
 
   return calc_reach_color(color, EMPTY, buf, peekState);
 }
+
+int Board::collect_group(const int spread_center, const int spread_color,
+                         std::vector<bool>& buf, std::function<int(int)> f_peek) const {
+  if (buf.size() != m_numvertices) {
+    buf.resize(m_numvertices);
+  }
+
+  int reachable = 0;
+  auto open = std::queue<int>();
+  auto color = f_peek(spread_center);
+
+  if (color == spread_color) {
+    open.push(spread_center);
+    buf[spread_center] = true;
+    reachable++;
+  }
+
+  while (!open.empty()) {
+    const auto vtx = open.front();
+    open.pop();
+
+    for (int k = 0; k < 4; ++k) {
+      const auto neighbor = vtx + m_dirs[k];
+      const auto peek = f_peek(neighbor);
+      if (!buf[neighbor] && peek == spread_color) {
+        reachable++;
+        buf[neighbor] = true;
+        open.push(neighbor);
+      }
+    }
+  }
+
+  return reachable;
+}
+
 
 int Board::calc_reach_color(int color, int spread_color,
                             std::vector<bool> &buf, std::function<int(int)> f_peek) const {
@@ -966,13 +1044,78 @@ void Board::reset_territory(std::array<territory_t, NUM_VERTICES> &territory) co
   }
 }
 
-bool Board::is_avoid_to_move(Board::avoid_t avoid, const int vtx,
-                             const int color) const {
+bool Board::is_avoid_move(Board::avoid_t avoid,
+                          const int vtx,
+                          const int color) const {
   if (avoid == avoid_t::NONE) {
     return false;
-  } else if (avoid == avoid_t::REAL_EYE) {
-    return is_real_eye(vtx, color);
+  } else if (avoid == avoid_t::SEARCH_BLOCK) {
+    auto eye = is_eye(vtx, color);
+    if (eye) {
+      auto eyes_collect = std::vector<int>{};
+      auto ownership = get_ownership();
+      auto group = std::vector<bool>(m_numvertices, false);
+
+      const auto peekState = [&] (int vtx) {
+        if (is_in_board(vtx)) {
+          const auto x = get_x(vtx);
+          const auto y = get_y(vtx);
+          const auto index = get_index(x, y);
+          return ownership[index];
+        }
+        return static_cast<int>(INVAL);
+      };
+
+      // 在同一快地裡就被視為同一個棋塊
+      const auto res = collect_group(vtx, color, group, peekState);
+      assert(res != 0);
+      
+      // 搜尋棋塊內所有的真眼，避免將所有真眼都填掉
+      for (int y = 0; y < m_boardsize; ++y) {
+        for (int x = 0; x < m_boardsize; ++x) {
+          const auto vertex = get_vertex(x, y);
+          if (group[vertex] && is_eye(vertex, color)) {
+            auto opc = size_t{0};
+            auto outside = size_t{0};
+            for (int k = 4; k < 8; ++k) {
+              const auto avtx = vertex + m_dirs[k];
+              if (m_state[avtx] == INVAL) {
+                outside++;
+              } 
+
+              if (group[avtx]) {
+                opc++;
+              }
+            }
+            if (opc >= 3 || opc + outside == 4) {
+              eyes_collect.emplace_back(vertex);
+            }
+          }
+        }
+      }
+      bool alive_group = eyes_collect.size() >= 2;
+      return alive_group;
+      /*
+      int corner = 0;
+      int stones = 0;
+      for (int k = 4; k < 8; ++k) {
+        const auto avtx = vtx + m_dirs[k];
+        
+        if (m_state[avtx] == color ) {
+          corner++;
+          stones = get_stones(avtx);
+        } else if (m_state[avtx] == INVAL) {
+          corner++;
+        }
+      }
+      if (corner == 4 && stones = 5) {
+
+      }
+      */
+ 
+    }
   }
+
   return false;
 }
 
@@ -987,7 +1130,7 @@ void Board::exchange_to_move() {
   update_zobrist_tomove(BLACK, WHITE);
 }
 
-bool Board::is_in_board(const int vtx) {
+bool Board::is_in_board(const int vtx) const {
   return m_state[vtx] != INVAL;
 }
 
@@ -997,6 +1140,14 @@ int Board::get_boardsize() const {
 
 int Board::get_intersections() const {
   return m_intersections;
+}
+
+int Board::get_komi_integer() const {
+  return m_komi_integer;
+}
+
+float Board::get_komi_float() const {
+  return m_komi_float;
 }
 
 float Board::get_komi() const {
@@ -1031,6 +1182,16 @@ int Board::get_komove() const {
   return m_komove;
 }
 
+int Board::get_stones(const int x, const int y) const {
+  const int vtx = get_vertex(x, y);
+  return get_stones(vtx);
+}
+
+int Board::get_stones(const int vtx) const {
+  const int parent = m_string.parent[vtx];
+  return m_string.stones[parent];
+}
+
 int Board::get_libs(const int x, const int y) const {
   const int vtx = get_vertex(x, y);
   return get_libs(vtx);
@@ -1060,7 +1221,8 @@ std::vector<int> Board::get_ownership() const {
     for (int x = 0; x < m_boardsize; ++x) {
       const auto idx = get_index(x, y);
       const auto vtx = get_vertex(x, y);
-      if (black[vtx] && white[vtx] || !black[vtx] && !white[vtx]) {
+      // 如果盤面沒有棋子 "black" 和 "white" 都不會存在
+      if ((black[vtx] && white[vtx]) || (!black[vtx] && !white[vtx])) {
         res[idx] = EMPTY;
       } else if (black[vtx]) {
         res[idx] = BLACK;  
@@ -1073,6 +1235,143 @@ std::vector<int> Board::get_ownership() const {
   return res;
 }
 
+
+int Board::get_groups(std::vector<int> &groups) const {
+
+  groups = std::vector<int>(m_numvertices, 0);
+  int cnt = 0;
+  auto ownership = get_ownership();
+
+  const auto peekState = [&] (int vtx) {
+    if (is_in_board(vtx)) {
+      const auto x = get_x(vtx);
+      const auto y = get_y(vtx);
+      const auto index = get_index(x, y);
+      return ownership[index];
+    }
+    return static_cast<int>(INVAL);
+  };
+
+  for (int y = 0; y < m_boardsize; ++y) {
+    for (int x = 0; x < m_boardsize; ++x) {
+      const auto vtx = get_vertex(x, y);
+      const auto color = m_state[vtx];
+      if (color != EMPTY && groups[vtx] == 0) {
+        cnt++;
+        auto group = std::vector<bool>(m_numvertices, false);
+
+        // 在同一快地裡就被視為同一個棋塊
+        const auto res = collect_group(vtx, color, group, peekState);
+
+        assert(res != 0);
+
+        for (int v = 0; v < m_numvertices; ++v) {
+          if (group[v]) {
+            groups[v] = cnt;
+          }
+        }
+      }
+    }
+  }
+
+  return cnt;
+}
+
+int Board::get_alive_groups(std::vector<int> &alive_groups) const {
+  alive_groups = std::vector<int>(m_numvertices, 0);
+  auto groups = std::vector<int>{};
+  int alive_cnt = 0;
+
+  const auto cnt = get_groups(groups);
+  const auto ownership = get_ownership();
+
+  for (int c = 1; c <= cnt; ++c) {
+    auto eyes_collect = std::vector<int>{};
+
+    for (int y = 0; y < m_boardsize; ++y) {
+      for (int x = 0; x < m_boardsize; ++x) {
+        const auto vtx = get_vertex(x, y);
+        const auto idx = get_index(x, y);
+        const auto color = ownership[idx];
+        if (groups[vtx] == c && is_eye(vtx, color)) {
+          auto opc = size_t{0};
+          auto outside = size_t{0};
+          for (int k = 4; k < 8; ++k) {
+            const auto avtx = vtx + m_dirs[k];
+            if (m_state[avtx] == INVAL) {
+              outside++;
+            } 
+
+            if (groups[avtx] == c) {
+              opc++;
+            }
+          }
+          if (opc >= 3 || opc + outside == 4) {
+            eyes_collect.emplace_back(vtx);
+          }
+        }
+      }
+    }
+    if (eyes_collect.size() >= 2) {
+      alive_cnt++;
+      for (int v = 0; v < m_numvertices; ++v) {
+        if (groups[v] == c) {
+          alive_groups[v] = alive_cnt;
+        }
+      }
+    }
+  }
+
+  return alive_cnt;
+}
+
+std::vector<int> Board::get_alive_seki(const int color) const {
+  
+  auto alive_seki = std::vector<int>{};
+
+  auto alive_groups  = std::vector<int>{};
+  const auto alive_cnt = get_alive_groups(alive_groups);
+
+  const auto ownership = get_ownership();
+  for (int y = 0; y < m_boardsize; ++y) {
+    for (int x = 0; x < m_boardsize; ++x) {
+      const auto vtx = get_vertex(x, y);
+      const auto idx = get_index(x, y);
+      const auto owner = ownership[idx];
+
+      if (owner == EMPTY) {
+        // 如果單官太空，我們會認為此空尚未確定
+        int cnt = 0;
+        for (int k = 0; k < 4; ++k) {
+          const auto avtx = vtx + m_dirs[k];
+          if (m_state[avtx] == EMPTY || m_state[avtx] == INVAL) {
+            cnt++;
+          }
+        }
+        if (cnt == 4) {
+          alive_seki.emplace_back(vtx);
+          continue;
+        }
+
+        // 如果單官連接活棋，代表此空尚未確定
+        for (int k = 0; k < 4; ++k) {
+          const auto avtx = vtx + m_dirs[k];
+          if (is_in_board(avtx)) {
+            const auto x = get_x(avtx);
+            const auto y = get_y(avtx);
+            const auto aidx = get_index(x, y);
+            if(alive_groups[avtx] != 0 && ownership[aidx] == color) {
+              alive_seki.emplace_back(vtx);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return alive_seki;
+}
 
 void Board::vertex_stream(std::ostream &out, int vertex) const {
   assert(vertex != NO_VERTEX);
@@ -1097,15 +1396,12 @@ void Board::vertex_stream(std::ostream &out, int vertex) const {
   out << y_str;
 }
 
-
-
 std::string Board::vertex_to_string(int vertex) const {
   auto res = std::ostringstream{};
   vertex_stream(res, vertex);
 
   return res.str();
 }
-
 
 void Board::sgf_stream(std::ostream &out,
                       const int vertex, const int color) const {

@@ -71,7 +71,7 @@ void SGFstream::sgf_stream(std::ostream &out, GameState &state) {
     if (score < 0.f) {
       out << "Resign";
     } else {
-      out << std::setw(2) << score;
+      out << score;
     }
     out << "]";
   }
