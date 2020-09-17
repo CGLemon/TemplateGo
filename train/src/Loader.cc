@@ -77,20 +77,23 @@ void Loader::ownership_stream(std::vector<float> &ownership, std::string &in) {
   ownership.reserve(ownership_cnt);
 }
 
-void Loader::final_score_stream(int &final_score_idx,
+void Loader::final_score_stream(int &scorebelief_idx,
+                                float &final_score,
                                 std::string &in) {
   
 
   const int intersections = m_boardsize * m_boardsize;
-  const int score = std::stoi(in);
+  const int score_idx = std::stoi(in);
 
-  int index = score + intersections;
+  int index = score_idx + 2 * intersections;
   if (index < 0) {
     index = 0;
-  } else if (index >= 2 * intersections) {
-    index = 2 * intersections - 1;
+  } else if (index >= 4 * intersections) {
+    index = 4 * intersections - 1;
   }
-  final_score_idx = index;
+  scorebelief_idx = index;
+
+  final_score = (float)score_idx/ 2.0f;
 }
 
 
@@ -122,7 +125,7 @@ void Loader::load_data(std::string &filename){
 
     // board size
     step.boardsize = std::stoi(line);
-    assert((size_t)m_boardsize == step.boardsize);
+    assert((int)m_boardsize == step.boardsize);
 
     // input
     std::getline(file, line);
@@ -142,7 +145,7 @@ void Loader::load_data(std::string &filename){
     ownership_stream(step.ownership, line);
 
     std::getline(file, line);
-    final_score_stream(step.final_score_idx, line);
+    final_score_stream(step.scorebelief_idx, step.final_score, line);
 
     std::getline(file, line);
     winrate_stream(step.winrate, line);

@@ -87,7 +87,7 @@ struct Net : torch::nn::Module {
   size_t m_value_out{0};
 
   size_t m_probbility_out{0};
-  size_t m_finalscore_out{0};
+  size_t m_scorebelief_out{0};
   size_t m_ownership_out{0};
   size_t m_value_lables{0};
 
@@ -114,7 +114,7 @@ struct Net : torch::nn::Module {
   std::vector<torch::Tensor> value_forward(torch::Tensor x);
   std::vector<torch::Tensor> policy_forward(torch::Tensor x);
 
-  std::array<torch::Tensor, 5> forward(torch::Tensor planes, torch::Tensor features);
+  std::array<torch::Tensor, 6> forward(torch::Tensor planes, torch::Tensor features);
 
   struct RES_BLOCK {
     torch::nn::Conv2d Convlayer_1{nullptr};
@@ -149,8 +149,9 @@ struct Net : torch::nn::Module {
   torch::nn::Conv2d ValueHead{nullptr};
   torch::nn::BatchNorm2d ValueBNlyer{nullptr};
 
-  torch::nn::Conv2d FinalScoreConv{nullptr};    // final score
+  torch::nn::Conv2d ScoreBeliefConv{nullptr};   // score belief
   torch::nn::Conv2d OwnershipConv{nullptr};     // ownship
+  torch::nn::Linear FinalScoreFCLayer{nullptr}; // final score
   torch::nn::Linear ValueFCLayer{nullptr};      // winrate
 };
 
@@ -161,7 +162,8 @@ struct TrainDataBuffer {
 
   std::vector<float> probabilities;
   std::vector<float> opponent_probabilities;
-  int final_score_index;
+  int scorebelief_idx;
+  float final_score;
 
   std::vector<float> ownership;
   std::vector<float> winrate;
@@ -194,7 +196,6 @@ public:
   void save_weights(std::string &filename);
   void change_config(TrainConfig config);
 private:
-
   bool gpu_is_available{false};
   bool on_gpu{false};
   std::shared_ptr<Net> m_net{nullptr};

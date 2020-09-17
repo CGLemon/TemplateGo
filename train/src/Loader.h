@@ -16,7 +16,8 @@ struct Step {
 
   std::vector<float> probabilities;
   std::vector<float> opponent_probabilities;
-  int final_score_idx;
+  int scorebelief_idx;
+  float final_score;
 
   std::vector<float> ownership;
   std::vector<float> winrate;
@@ -52,7 +53,8 @@ private:
 
   void ownership_stream(std::vector<float> &ownership, std::string &in);
 
-  void final_score_stream(int &flnal_score_idx,
+  void final_score_stream(int &scorebelief_idx,
+                          float &final_score,
                           std::string &in);
 
   void winrate_stream(std::vector<float> &winrate, std::string &in);

@@ -111,22 +111,24 @@ Net::Net(size_t boardsize,
          size_t resnet_channels,
          size_t resnet_blocks) {
 
-  m_boardsize = boardsize;
-  m_res_channels = resnet_channels;
-  m_res_blocks = resnet_blocks;
-
-  // fix parameters
   m_input_channels = 18;
   m_input_features = 10;
-  m_squeeze_size = 4 * resnet_channels;
+  m_boardsize = boardsize;
+
+  // Rediual tower
+  m_res_channels = resnet_channels;
+  m_res_blocks = resnet_blocks;
+  m_squeeze_size = 4 * resnet_channels; // se unit
+
+  // Output head
   m_policy_out = 32;
   m_value_out = 64;
-
   m_probbility_out = 1;
-  m_finalscore_out = 2;
+  m_scorebelief_out = 4;
   m_ownership_out = 1;
   m_value_lables = 21;
 
+  // BatchNorm Layer
   m_eps = 1e-05;
   m_train_mode = true;
   m_affine = false;
@@ -146,6 +148,9 @@ size_t Net::get_value_labels() {
   return m_value_lables;
 }
 
+/*
+ * Building input layer graph.
+ */
 void Net::build_input_layer() {
   InputLayer = register_module("Input convolution layer",
                                torch::nn::Conv2d(
@@ -156,6 +161,7 @@ void Net::build_input_layer() {
                                .bias(false)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{InputLayer->weight, CONV_WEIGHT});
 
+
   InputBNlyer = register_module("Input batchNorm layer",
                                 torch::nn::BatchNorm2d(
                                 torch::nn::BatchNorm2dOptions(m_res_channels)
@@ -165,8 +171,7 @@ void Net::build_input_layer() {
 
   m_collect.emplace_back(std::pair<torch::Tensor, int>{InputBNlyer->running_mean, BATCHNORM_MEAN});
   m_collect.emplace_back(std::pair<torch::Tensor, int>{InputBNlyer->running_var, BATCHNORM_VAR});
-
-
+  
   InputFCLayer = register_module("Input fullyconnect layer",
                                  torch::nn::Linear(m_input_features, m_res_channels));
 
@@ -174,7 +179,20 @@ void Net::build_input_layer() {
   m_collect.emplace_back(std::pair<torch::Tensor, int>{InputFCLayer->bias, FULLYCONNET_BIAS});
 }
 
+
+/*
+ * Building rediual tower block graph.
+ */
 void Net::build_tower_block(size_t id) {
+
+ /*
+  * TODO:
+  * Fixup Initialization: Residual Learning Withuot Normalization
+  * We can simply remove BatchNorm layer because seemed to have no disadvatanges in the learning.
+  * Most importantly, BatchNorm layer is expensive to compute. Removing them can speed up learning.
+  *
+  * The SE Unit seemed to have same effect with BatchNorm, maybe?
+  */
 
   auto tower_ptr = ResidualTower.data() + id;
   assert(ResidualTower.size() > id);
@@ -189,6 +207,7 @@ void Net::build_tower_block(size_t id) {
                                            .bias(false)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->Convlayer_1->weight, CONV_WEIGHT});
 
+
   std::string name_2 = "tower batchNorm layer 1 : " + std::to_string(id);
   tower_ptr->BNlyer_1 = register_module(name_2,
                                         torch::nn::BatchNorm2d(
@@ -198,6 +217,7 @@ void Net::build_tower_block(size_t id) {
                                         .track_running_stats(m_train_mode)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->BNlyer_1->running_mean, BATCHNORM_MEAN});
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->BNlyer_1->running_var, BATCHNORM_VAR});
+ 
 
   std::string name_3 = "tower convolution layer 2 : " + std::to_string(id);
   tower_ptr->Convlayer_2 = register_module(name_3,
@@ -209,6 +229,7 @@ void Net::build_tower_block(size_t id) {
                                            .bias(false)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->Convlayer_2->weight, CONV_WEIGHT});
 
+
   std::string name_4 = "tower batchNorm layer 2 : " + std::to_string(id);
   tower_ptr->BNlyer_2 = register_module(name_4,
                                         torch::nn::BatchNorm2d(
@@ -219,7 +240,7 @@ void Net::build_tower_block(size_t id) {
 
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->BNlyer_2->running_mean, BATCHNORM_MEAN});
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->BNlyer_2->running_var, BATCHNORM_VAR});
-
+  
 
   std::string name_5 = "tower extend fullyconnect layer : " + std::to_string(id);
   tower_ptr->ExtendFCLayer = register_module(name_5,
@@ -237,6 +258,9 @@ void Net::build_tower_block(size_t id) {
   m_collect.emplace_back(std::pair<torch::Tensor, int>{tower_ptr->SqueezeFCLayer->bias, FULLYCONNET_BIAS});
 }
 
+/*
+ * Building rediual tower graph.
+ */
 void Net::build_tower() {
   for (auto b = size_t{0}; b < m_res_blocks; ++b) {
     ResidualTower.emplace_back(RES_BLOCK{});
@@ -246,6 +270,9 @@ void Net::build_tower() {
   } 
 }
 
+/*
+ * Building policy head graph.
+ */
 void Net::build_policy_head() {
 
   PolicyHead = register_module("policy head convolution",
@@ -263,7 +290,6 @@ void Net::build_policy_head() {
                                  .track_running_stats(m_train_mode)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{PolicyBNlyer->running_mean, BATCHNORM_MEAN});
   m_collect.emplace_back(std::pair<torch::Tensor, int>{PolicyBNlyer->running_var, BATCHNORM_VAR});
-
 
   
   PolicyConv = register_module("policy convolution",
@@ -297,6 +323,9 @@ void Net::build_policy_head() {
 
 }
 
+/*
+ * Building value head graph.
+ */
 void Net::build_value_head() {
   ValueHead = register_module("value head convolution",
                                torch::nn::Conv2d(torch::nn::Conv2dOptions(
@@ -304,6 +333,7 @@ void Net::build_value_head() {
                                .stride(1)
                                .bias(false)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{ValueHead->weight, CONV_WEIGHT});
+
   ValueBNlyer = register_module("value batchNorm",
                                  torch::nn::BatchNorm2d(
                                  torch::nn::BatchNorm2dOptions(m_value_out)
@@ -312,14 +342,14 @@ void Net::build_value_head() {
                                  .track_running_stats(m_train_mode)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{ValueBNlyer->running_mean, BATCHNORM_MEAN});
   m_collect.emplace_back(std::pair<torch::Tensor, int>{ValueBNlyer->running_var, BATCHNORM_VAR});
+  
 
-
-  FinalScoreConv = register_module("final score convolution",
-                                   torch::nn::Conv2d(torch::nn::Conv2dOptions(
-                                   m_value_out, m_finalscore_out, 1)
-                                   .stride(1)
-                                   .bias(false)));
-  m_collect.emplace_back(std::pair<torch::Tensor, int>{FinalScoreConv->weight, CONV_WEIGHT});
+  ScoreBeliefConv = register_module("final score convolution",
+                                    torch::nn::Conv2d(torch::nn::Conv2dOptions(
+                                    m_value_out, m_scorebelief_out, 1)
+                                    .stride(1)
+                                    .bias(false)));
+  m_collect.emplace_back(std::pair<torch::Tensor, int>{ScoreBeliefConv->weight, CONV_WEIGHT});
 
   OwnershipConv = register_module("ownership convolution",
                                   torch::nn::Conv2d(torch::nn::Conv2dOptions(
@@ -328,12 +358,20 @@ void Net::build_value_head() {
                                   .bias(false)));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{OwnershipConv->weight, CONV_WEIGHT});
 
+  FinalScoreFCLayer = register_module("final score connect",
+                                       torch::nn::Linear(m_value_out, 1));
+  m_collect.emplace_back(std::pair<torch::Tensor, int>{FinalScoreFCLayer->weight, FULLYCONNET_WEIGHT});
+  m_collect.emplace_back(std::pair<torch::Tensor, int>{FinalScoreFCLayer->bias, FULLYCONNET_BIAS});
+
   ValueFCLayer = register_module("value fully connect",
                                  torch::nn::Linear(m_value_out, m_value_lables));
   m_collect.emplace_back(std::pair<torch::Tensor, int>{ValueFCLayer->weight, FULLYCONNET_WEIGHT});
   m_collect.emplace_back(std::pair<torch::Tensor, int>{ValueFCLayer->bias, FULLYCONNET_BIAS});
 }
 
+/*
+ * Building graph.
+ */
 void Net::build_graph() {
   if (applied) {
     return;
@@ -378,6 +416,10 @@ torch::Tensor Net::se_forward(torch::Tensor x, torch::Tensor res, size_t id) {
 }
 
 torch::Tensor Net::tower_forward(torch::Tensor x, size_t id) {
+ 
+ /*
+  * TODO: Removing BatchNorm Layer can speed up the learning.
+  */
   auto tower_ptr = ResidualTower.data() + id;
   assert(ResidualTower.size() > id);
 
@@ -399,16 +441,15 @@ std::vector<torch::Tensor> Net::policy_forward(torch::Tensor x) {
   x = PolicyBNlyer(x);
   x = torch::relu(x);
 
-  auto pass = torch::adaptive_avg_pool2d(x, {1, 1});
-  pass = torch::flatten(pass, 1, 3);
+  auto p_pool = torch::adaptive_avg_pool2d(x, {1, 1});
+  auto pass = torch::flatten(p_pool, 1, 3);
   pass = PolicyFCLayer(pass);
 
   auto prob = PolicyConv(x);
   prob = torch::flatten(prob, 1, 3);
   prob =  torch::cat({prob, pass}, 1);
 
-  auto opp_pass = torch::adaptive_avg_pool2d(x, {1, 1});
-  opp_pass = torch::flatten(opp_pass, 1, 3);
+  auto opp_pass = torch::flatten(p_pool, 1, 3);
   opp_pass = OppPolicyFCLayer(opp_pass); 
 
   auto opp_prob = OppPolicyConv(x);
@@ -423,22 +464,25 @@ std::vector<torch::Tensor> Net::value_forward(torch::Tensor x) {
   x = ValueBNlyer(x);
   x = torch::relu(x);
 
-  auto finalscore = FinalScoreConv(x);
-  finalscore = torch::flatten(finalscore, 1, 3);
+  auto scorebelief = ScoreBeliefConv(x);
+  scorebelief = torch::flatten(scorebelief, 1, 3);
 
   auto ownership = OwnershipConv(x);
   ownership = torch::flatten(ownership, 1, 3);
   ownership = torch::tanh(ownership);
 
-  auto winrate = torch::adaptive_avg_pool2d(x, {1, 1});
-  winrate = torch::flatten(winrate, 1, 3);
+  auto v_pool = torch::adaptive_avg_pool2d(x, {1, 1});
+  auto finalscore = torch::flatten(v_pool, 1, 3);
+  finalscore = FinalScoreFCLayer(finalscore);
+
+  auto winrate = torch::flatten(v_pool, 1, 3);
   winrate = ValueFCLayer(winrate);
   winrate = torch::tanh(winrate);
 
-  return std::vector<torch::Tensor>{finalscore, ownership, winrate};
+  return std::vector<torch::Tensor>{scorebelief, ownership, finalscore, winrate};
 }
 
-std::array<torch::Tensor, 5> Net::forward(torch::Tensor planes, torch::Tensor features) {
+std::array<torch::Tensor, 6> Net::forward(torch::Tensor planes, torch::Tensor features) {
   auto x = input_forward(planes, features); 
   for (auto b = size_t{0}; b < m_res_blocks; ++b) {
     x = tower_forward(x, b);
@@ -458,13 +502,12 @@ std::array<torch::Tensor, 5> Net::forward(torch::Tensor planes, torch::Tensor fe
   auto val = value_forward(x);
 
   /*
-   * Final score predicts the distance of score.
-   * It predicts as much as possible komi.
-   * If the board size is "bsize", the tatol predicts score is "bsize * bsize * 2".
-   * Set "s = bsize * bsize * 4", for each possible final score value
-   *      [-s, -(s-1), -(s-2), ...., s-2, s-1] 
+   * Score belief predicts the board on score with komi.
+   * If the board size is "bsize", the tatol predicts score is "bsize * bsize * 4".
+   * Set "s = bsize * bsize" for each possible final score value
+   *      [-s, -(s-0.5), -(s-1.5), ...., s-1, s-0.5] 
    */
-  auto finalscore = val[0]; 
+  auto scorebelief = val[0]; 
 
   /*
    * Ownership of intersections.
@@ -474,11 +517,13 @@ std::array<torch::Tensor, 5> Net::forward(torch::Tensor planes, torch::Tensor fe
    */
   auto ownership = val[1];  
 
+  // Final score predicts the board on score with komi.
+  auto finalscore = val[2];
 
-  // Multi lables winrate. range [-1.0 ~ 1.0]
-  auto winrate = val[2];  
+  // Multi-labled winrate. range [-1.0 ~ 1.0]
+  auto winrate = val[3];  
 
-  return std::array<torch::Tensor, 5>{prob, opp_prob, finalscore, ownership, winrate};
+  return std::array<torch::Tensor, 6>{prob, opp_prob, scorebelief, ownership, finalscore, winrate};
 }
 
 std::vector<std::vector<float>> Net::gather_weights() {
@@ -628,7 +673,6 @@ void Train_helper::save_weights(std::string &filename) {
   Torch::save_weights(filename, weights);
 }
 
-
 void Train_helper::change_config(TrainConfig config) {
 
   float old_lr = m_config.learning_rate;
@@ -647,8 +691,6 @@ void Train_helper::change_config(TrainConfig config) {
                           torch::optim::AdamOptions(lr).weight_decay(weight_decay));
   }
 }
-
-
 
 std::vector<std::pair<std::string, float>>
 Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
@@ -674,7 +716,8 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
   
   // target
   const int probabilities_size = buffer_ptr->probabilities.size();
-  const int final_score_size = 2 * intersections;
+  const int scorebelief_size = 4 * intersections;
+  const int finalscore_size = 1;
   const int ownership_size = buffer_ptr->ownership.size();
   const int winrate_size = buffer_ptr->winrate.size();
   
@@ -690,20 +733,22 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
   // input
   torch::Tensor batch_input_planes = torch::zeros({batch_size, in_channels, boardsize, boardsize});
   torch::Tensor batch_input_features = torch::zeros({batch_size, in_features});
-  
+
   auto batch_input_planes_ptr = (float*)batch_input_planes.data_ptr();
   auto batch_input_featurest_ptr = (float*)batch_input_features.data_ptr();
 
   // target
   torch::Tensor batch_policy = torch::zeros({batch_size, probabilities_size});
   torch::Tensor batch_opp_policy = torch::zeros({batch_size, probabilities_size});
-  torch::Tensor batch_score = torch::zeros({batch_size, final_score_size});
+  torch::Tensor batch_scorebelief = torch::zeros({batch_size, scorebelief_size});
+  torch::Tensor batch_finalscore = torch::zeros({batch_size, finalscore_size});
   torch::Tensor batch_ownership = torch::zeros({batch_size, ownership_size});
   torch::Tensor batch_winrate = torch::zeros({batch_size, winrate_size});
   
   auto batch_policy_ptr = (float*)batch_policy.data_ptr();
   auto batch_opp_policy_ptr = (float*)batch_opp_policy.data_ptr();
-  auto batch_score_ptr = (float*)batch_score.data_ptr();
+  auto batch_scorebelief_ptr = (float*)batch_scorebelief.data_ptr();
+  auto batch_finalscore_ptr = (float*)batch_finalscore.data_ptr();
   auto batch_ownership_ptr = (float*)batch_ownership.data_ptr();
   auto batch_winrate_ptr = (float*)batch_winrate.data_ptr();
   
@@ -725,7 +770,9 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
       *(batch_opp_policy_ptr+idx) = buffer_ptr->opponent_probabilities[idx];
     }
 
-    *(batch_score_ptr + (buffer_ptr->final_score_index)) = 1.0f;
+    *(batch_scorebelief_ptr + (buffer_ptr->scorebelief_idx)) = 1.0f;
+
+    *(batch_finalscore_ptr) = buffer_ptr->final_score;
 
     for (auto idx = int{0}; idx < ownership_size; ++idx) {
       *(batch_ownership_ptr+idx) = buffer_ptr->ownership[idx];
@@ -743,7 +790,8 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
     // target
     batch_policy_ptr += probabilities_size;
     batch_opp_policy_ptr += probabilities_size;
-    batch_score_ptr += final_score_size;
+    batch_scorebelief_ptr += scorebelief_size;
+    batch_finalscore_ptr += finalscore_size;
     batch_ownership_ptr += ownership_size;
     batch_winrate_ptr += winrate_size;
   }
@@ -755,7 +803,8 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
 
     batch_policy = batch_policy.to(*m_device);
     batch_opp_policy = batch_opp_policy.to(*m_device);
-    batch_score = batch_score.to(*m_device);
+    batch_scorebelief = batch_scorebelief.to(*m_device);
+    batch_finalscore = batch_finalscore.to(*m_device);
     batch_ownership = batch_ownership.to(*m_device);
     batch_winrate = batch_winrate.to(*m_device);
   }
@@ -764,28 +813,50 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
   auto prediction = m_net->forward(batch_input_planes, batch_input_features);
   auto policy = prediction[0];
   auto opp_policy = prediction[1];
-  auto finalscore = prediction[2];
+  auto scorebelief = prediction[2];
   auto ownership = prediction[3];
-  auto winrate = prediction[4]; 
+  auto finalscore = prediction[4];
+  auto winrate = prediction[5];
 
-  auto policy_loss = torch::mean(-torch::sum(torch::mul(torch::log_softmax(policy, -1), batch_policy), 1), 0);
+  auto policy_loss = torch::mean(-torch::sum(
+                         torch::mul(torch::log_softmax(policy, -1), batch_policy), // unreduce
+                             1), 0);
 
-  auto opp_policy_loss = torch::mean(-torch::sum(torch::mul(torch::log_softmax(opp_policy, -1), batch_opp_policy), 1), 0);
+  auto opp_policy_loss = torch::mean(-torch::sum(
+                             torch::mul(torch::log_softmax(opp_policy, -1), batch_opp_policy), // unreduce
+                                 1), 0);
 
-  auto score_cdf_loss = torch::mse_loss(torch::cumsum(torch::softmax(finalscore, -1), 1), torch::cumsum(batch_score, 1));
-  auto score_pdf_loss = torch::mean(-torch::sum(torch::mul(torch::log_softmax(finalscore, -1), batch_score), 1), 0);
+  auto scorebelief_cdf_loss = torch::mse_loss(
+                                  torch::cumsum(torch::softmax(scorebelief, -1), 1), torch::cumsum(batch_scorebelief, 1));
 
-  //auto ownership_acc_loss = torch::mse_loss(torch::sum(ownership, -1), torch::sum(batch_ownership, -1));
-  auto ownership_loss = torch::mean(-torch::sum(torch::mul(torch::log((ownership + 1)/2 + 0.0001f), batch_ownership), 1), 0) +
-                            torch::mean(-torch::sum(torch::mul(torch::log((1 - ownership)/2 + 0.0001f), 1 - batch_ownership), 1), 0);
+  auto scorebelief_pdf_loss = torch::mean(-torch::sum(
+                                  torch::mul(torch::log_softmax(scorebelief, -1), batch_scorebelief), // unreduce
+                                      1), 0);
+
+  const auto huber_loss = [](torch::Tensor &x, torch::Tensor &y, float delta){
+    auto absdiff = torch::abs(x - y);
+    auto res = torch::where(absdiff > delta,
+                                0.5f * delta * delta + delta * (absdiff - delta),
+                                0.5f * torch::mul(absdiff, absdiff));
+    return torch::mean(torch::mean(res, 1), 0);
+  };
+
+  //auto finalscore_loss = torch::mse_loss(finalscore, batch_finalscore);
+  auto finalscore_mean = 20 * finalscore;
+  auto finalscore_loss = huber_loss(finalscore_mean, batch_finalscore, 12.f);
+
+  auto ownership_loss = torch::mean(-torch::sum(
+                            torch::mul(torch::log((ownership + 1)/2 + 0.0001f), batch_ownership), 1), 0) +
+                            torch::mean(-torch::sum(torch::mul(torch::log((1 - ownership)/2 + 0.0001f), 1 - batch_ownership), // unreduce
+                                1), 0);
   auto winrate_loss = torch::mse_loss(winrate, batch_winrate);
 
   auto loss = 
     1.00f * policy_loss +
     0.15f * opp_policy_loss +
-    (1.5f / (float)intersections) * score_cdf_loss +
-    (1.5f / (float)intersections) * score_pdf_loss +
-    //(1.50f / (float)intersections) * ownership_acc_loss +
+    (1.5f / (float)intersections) * scorebelief_cdf_loss +
+    (1.5f / (float)intersections) * scorebelief_pdf_loss +
+    0.0012 * finalscore_loss +
     (0.15f / (float)intersections) * ownership_loss +
     0.9f * winrate_loss;
 
@@ -797,11 +868,11 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
   Loss_.emplace_back(std::pair<std::string, float>{"total", loss.item<float>()});
   Loss_.emplace_back(std::pair<std::string, float>{"policy | coefficient : 1", policy_loss.item<float>()});
   Loss_.emplace_back(std::pair<std::string, float>{"opponent policy | coefficient : 0.15", opp_policy_loss.item<float>()});
-  Loss_.emplace_back(std::pair<std::string, float>{"final score cdf | coefficient : 1.5/intersections", score_cdf_loss.item<float>()});
-  Loss_.emplace_back(std::pair<std::string, float>{"final score pdf | coefficient : 1.5/intersections", score_pdf_loss.item<float>()});
-  //Loss_.emplace_back(std::pair<std::string, float>{"ownership accumulate", ownership_acc_loss.item<float>()});
+  Loss_.emplace_back(std::pair<std::string, float>{"score belief cdf | coefficient : 1.5/intersections", scorebelief_cdf_loss.item<float>()});
+  Loss_.emplace_back(std::pair<std::string, float>{"score belief pdf | coefficient : 1.5/intersections", scorebelief_pdf_loss.item<float>()});
+  Loss_.emplace_back(std::pair<std::string, float>{"final score | coefficient : 0.0012", finalscore_loss.item<float>()});
   Loss_.emplace_back(std::pair<std::string, float>{"ownership | coefficient : 0.15/intersections", ownership_loss.item<float>()});
-  Loss_.emplace_back(std::pair<std::string, float>{"multi lable winrate | coefficient : 0.9", winrate_loss.item<float>()});
+  Loss_.emplace_back(std::pair<std::string, float>{"multi-labled | coefficient : 0.9", winrate_loss.item<float>()});
 
   return Loss_;
 }
@@ -826,11 +897,13 @@ void Evaluation::print_eval(torch::Tensor planes, torch::Tensor features) {
 
   auto policy = torch::softmax(out[0], -1);
   auto opp_policy = torch::softmax(out[1], -1); // ignore
-  auto finalscore = torch::softmax(out[2], -1);
+  auto scorebelief = torch::softmax(out[2], -1);
   auto ownership = out[3];
-  auto winrate = out[4];
+  auto finalscore = out[4];
+  auto winrate = out[5];
 
   auto policy_vec = tensor_to_vector(policy);
+  auto scorebelief_vec = tensor_to_vector(scorebelief);
   auto finalscore_vec = tensor_to_vector(finalscore);
   auto ownership_vec = tensor_to_vector(ownership);
   auto winrate_vec = tensor_to_vector(winrate);
@@ -842,7 +915,13 @@ void Evaluation::print_eval(torch::Tensor planes, torch::Tensor features) {
   printf("\n\n");
 
 
-  printf("Final Score | size %zu : \n", finalscore_vec.size());
+  printf("Score Belief | size %zu : \n", scorebelief_vec.size());
+  for (auto &v : scorebelief_vec) {
+    printf("%.5f ",v);
+  }
+  printf("\n\n");
+
+  printf("Final score | size %zu : \n", finalscore_vec.size());
   for (auto &v : finalscore_vec) {
     printf("%.5f ",v);
   }

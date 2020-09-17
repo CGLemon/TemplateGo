@@ -212,7 +212,6 @@ void training(ArgsParser &args, Loader &loader) {
 
         for (int c = 0; c < in_channels; ++c) {
           for (int idx = 0; idx < intersections; ++idx) {
-            //const int sym_idx = symmetry_nn_idx_table[sym][idx];
             const int sym_idx = symmetry.get_transform_idx(idx, sym);
             const int start = c * intersections;
             batches[b].input_planes[start + sym_idx] = (*buffer_ptr)->input_planes[start + idx];
@@ -224,24 +223,21 @@ void training(ArgsParser &args, Loader &loader) {
         }
 
         for (int idx = 0; idx < intersections; ++idx) {
-          //const int sym_idx = symmetry_nn_idx_table[sym][idx];
           const int sym_idx = symmetry.get_transform_idx(idx, sym);
           batches[b].probabilities[sym_idx] = (*buffer_ptr)->probabilities[idx];   
         }
         batches[b].probabilities[intersections] = (*buffer_ptr)->probabilities[intersections]; // pass
 
         for (int idx = 0; idx < intersections; ++idx) {
-          //const int sym_idx = symmetry_nn_idx_table[sym][idx];
           const int sym_idx = symmetry.get_transform_idx(idx, sym);
           batches[b].opponent_probabilities[sym_idx] = (*buffer_ptr)->opponent_probabilities[idx];   
         }
         batches[b].opponent_probabilities[intersections] = (*buffer_ptr)->opponent_probabilities[intersections]; // pass
 
-
-        batches[b].final_score_index = (*buffer_ptr)->final_score_idx;
+        batches[b].scorebelief_idx = (*buffer_ptr)->scorebelief_idx;
+        batches[b].final_score = (*buffer_ptr)->final_score;
                                                       
         for (int idx = 0; idx < intersections; ++idx) {
-          //const int sym_idx = symmetry_nn_idx_table[sym][idx];
           const int sym_idx = symmetry.get_transform_idx(idx, sym);
           batches[b].ownership[sym_idx] = (*buffer_ptr)->ownership[idx];
         }
