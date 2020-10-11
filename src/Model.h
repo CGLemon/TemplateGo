@@ -7,7 +7,7 @@
 #include <fstream>
 #include <sstream>
 
-#include "CacheTable.h"
+#include "Cache.h"
 #include "GameState.h"
 #include "config.h"
 #include "Blas.h"
@@ -31,126 +31,121 @@ static constexpr auto LABELS_CENTER = 10;
 static constexpr auto POTENTIAL_MOVES = NUM_INTERSECTIONS + 1;
 
 struct Desc {
-  struct ConvLayer {
-    void load_weights(std::vector<float> &loadweights);
+    struct ConvLayer {
+        void load_weights(std::vector<float> &loadweights);
+        std::vector<float> weights;
+    };
 
-    std::vector<float> weights;
-  };
+    struct BatchNormLayer {
+        void load_means(std::vector<float> &loadweights);
+        void load_stddevs(std::vector<float> &loadweights);
+        std::vector<float> means;
+        std::vector<float> stddevs;
+    };
 
-  struct BatchNormLayer {
-    void load_means(std::vector<float> &loadweights);
-    void load_stddevs(std::vector<float> &loadweights);
-
-    std::vector<float> means;
-    std::vector<float> stddevs;
-  };
-
-  struct LinearLayer {
-    void load_weights(std::vector<float> &loadweights);
-    void load_biases(std::vector<float> &loadweights);
-
-    std::vector<float> weights;
-    std::vector<float> biases;
-  };
+    struct LinearLayer {
+        void load_weights(std::vector<float> &loadweights);
+        void load_biases(std::vector<float> &loadweights);
+        std::vector<float> weights;
+        std::vector<float> biases;
+    };
 };
 
 
 struct Model {
-  struct NNweights {
+    struct NNweights {
 
-    struct ResidualTower {
-      Desc::ConvLayer conv_1;
-      Desc::BatchNormLayer bn_1;
-      Desc::ConvLayer conv_2;
-      Desc::BatchNormLayer bn_2;
+        struct ResidualTower {
+            Desc::ConvLayer conv_1;
+            Desc::BatchNormLayer bn_1;
+            Desc::ConvLayer conv_2;
+            Desc::BatchNormLayer bn_2;
 
-      Desc::LinearLayer extend;
-      Desc::LinearLayer squeeze;
+            Desc::LinearLayer extend;
+            Desc::LinearLayer squeeze;
+        };
+
+        bool loaded{false};
+        size_t channels{0};
+        size_t residuals{0};
+    
+
+        // input layer
+        Desc::ConvLayer input_conv;
+        Desc::BatchNormLayer input_bn;
+        Desc::LinearLayer input_fc;
+
+        // residual tower
+        std::vector<ResidualTower> residual_tower;
+
+        // policy head
+        Desc::ConvLayer p_conv;
+        Desc::BatchNormLayer p_bn;
+
+        Desc::ConvLayer prob_conv;     // probability
+        Desc::LinearLayer pass_fc;     // pass
+
+        // value head
+        Desc::ConvLayer v_conv;
+        Desc::BatchNormLayer v_bn;
+
+        Desc::ConvLayer sb_conv;
+        Desc::ConvLayer os_conv;
+        Desc::LinearLayer fs_fc;
+        Desc::LinearLayer v_fc;
+
     };
 
 
-    ~NNweights() { Utils::auto_printf("Weights released!\n"); }
+    class NNpipe {
+    public:
+        virtual void initialize(std::shared_ptr<NNweights> weights) = 0;
+        virtual void forward(const int boardsize,
+                             const std::vector<float> &planes,
+                             const std::vector<float> &features,
+                             std::vector<float> &output_pol,
+                             std::vector<float> &output_sb,
+                             std::vector<float> &output_os,
+                             std::vector<float> &output_fs,
+                             std::vector<float> &output_val) = 0;
 
-    bool loaded{false};
-    size_t channels{0};
-    size_t residuals{0};
-    
+        virtual void reload(std::shared_ptr<Model::NNweights> weights) = 0;
+        virtual void release() = 0;
+        virtual void destroy() = 0;
+    };
 
-    // input layer
-    Desc::ConvLayer input_conv;
-    Desc::BatchNormLayer input_bn;
-    Desc::LinearLayer input_fc;
+    static void loader(const std::string &filename,
+                       std::shared_ptr<NNweights> &nn_weight);
+    static void fill_weights(std::istream &weights_file,
+                             std::shared_ptr<NNweights> &nn_weight);
 
-    // residual tower
-    std::vector<ResidualTower> residual_tower;
+    static std::vector<float> gather_planes(const GameState *const state, 
+                                            const int symmetry);
 
-    // policy head
-    Desc::ConvLayer p_conv;
-    Desc::BatchNormLayer p_bn;
+    static std::vector<float> gather_features(const GameState *const state);
 
-    Desc::ConvLayer prob_conv;     // probability
-    Desc::LinearLayer pass_fc;     // pass
+    static void features_stream(std::ostream &out, const GameState *const state);
 
-    // value head
-    Desc::ConvLayer v_conv;
-    Desc::BatchNormLayer v_bn;
+    static std::string features_to_string(GameState &state);
 
-    Desc::ConvLayer sb_conv;
-    Desc::ConvLayer os_conv;
-    Desc::LinearLayer fs_fc;
-    Desc::LinearLayer v_fc;
+    static NNResult get_result(const GameState *const state,
+                               std::vector<float> &policy,
+                               std::vector<float> &score_belief,
+                               std::vector<float> &ownership,
+                               std::vector<float> &final_score,
+                               std::vector<float> &value,
+                               const float softmax_temp,
+                               const int symmetry);
 
-  };
+    static NNResult get_result_form_cache(NNResult result);
 
+    static void winograd_transform(std::shared_ptr<NNweights> &nn_weight);
 
-  class NNpipe {
-  public:
-    virtual void initialize(std::shared_ptr<NNweights> weights) = 0;
-    virtual void forward(const int boardsize,
-                         const std::vector<float> &planes,
-                         const std::vector<float> &features,
-                         std::vector<float> &output_pol,
-                         std::vector<float> &output_sb,
-                         std::vector<float> &output_os,
-                         std::vector<float> &output_fs,
-                         std::vector<float> &output_val) = 0;
+    static void fill_fullyconnect_layer(Desc::LinearLayer &layer, std::istream &weights_file);
 
-    virtual void reload(std::shared_ptr<Model::NNweights> weights) = 0;
-    virtual void release() = 0;
-  };
+    static void fill_batchnorm_layer(Desc::BatchNormLayer &layer, std::istream &weights_file);
 
-  static void loader(const std::string &filename,
-                     std::shared_ptr<NNweights> &nn_weight);
-  static void fill_weights(std::istream &weights_file,
-                           std::shared_ptr<NNweights> &nn_weight);
-
-  static std::vector<float> gather_planes(const GameState *const state, 
-                                          const int symmetry);
-
-  static std::vector<float> gather_features(const GameState *const state);
-
-  static void features_stream(std::ostream &out, const GameState *const state);
-
-  static std::string features_to_string(GameState &state);
-
-  static NNResult get_result(const GameState *const state,
-                             std::vector<float> &policy,
-                             std::vector<float> &score_belief,
-                             std::vector<float> &ownership,
-                             std::vector<float> &final_score,
-                             std::vector<float> &value,
-                             const float softmax_temp,
-                             const int symmetry);
-
-  static NNResult get_result_form_cache(NNResult result);
-
-  static void winograd_transform(std::shared_ptr<NNweights> &nn_weight);
-
-  static void fill_fullyconnect_layer(Desc::LinearLayer &layer, std::istream &weights_file);
-
-  static void fill_batchnorm_layer(Desc::BatchNormLayer &layer, std::istream &weights_file);
-
-  static void fill_convolution_layer(Desc::ConvLayer &layer, std::istream &weights_file);
+    static void fill_convolution_layer(Desc::ConvLayer &layer, std::istream &weights_file);
 };
 
 

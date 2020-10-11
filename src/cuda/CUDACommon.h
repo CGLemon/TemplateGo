@@ -2,6 +2,7 @@
 #define CUDACOMMON_H_INCLUDE
 #ifdef USE_CUDA
 
+
 #include "Utils.h"
 #include <cstdio>
 #include <cuda_runtime.h>
@@ -34,17 +35,14 @@ inline static int DivUp(int a, int b) { return (a + b - 1) / b; }
 
 struct CudaHandel {
 #ifdef USE_CUDNN
-  cudnnHandle_t cudnn_handel;
+    cudnnHandle_t cudnn_handel;
 #endif
-  cublasHandle_t cublas_handel;
+    cublasHandle_t cublas_handel;
 
-  void apply();
-
+    void apply();
 };
 
-
 void cuda_gpu_info();
-
 
 #endif
 #endif

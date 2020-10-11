@@ -11,50 +11,37 @@
 
 class Trainer {
 public:
-  void gather_step(GameState &state, UCTNode &node);
+    void gather_step(GameState &state, UCTNode &node);
+    void gather_step(GameState &state, const int vtx);
+    void gather_winner(GameState &state);
 
-  void gather_step(GameState &state, const int vtx);
+    void clear_game_steps();
 
-  void gather_winner(GameState &state);
-
-  void clear_game_steps();
-
-  void dump_memory() const;
-
-  void save_data(std::string &filename, bool append = false);
-
-  void data_stream(std::ostream &out);
+    void dump_memory() const;
+    void save_data(std::string &filename, bool append = false);
+    void data_stream(std::ostream &out);
 
 private:
-  struct Step {
-    std::vector<int> input_planes;
+    struct Step {
+        std::vector<int> input_planes;
+        std::vector<float> input_features; 
+        std::vector<float> probabilities;
+        std::vector<float> opponent_probabilities;
+        std::vector<int> ownership;
 
-    std::vector<float> input_features; 
+        float final_score;
+        int final_score_idx;
+        std::vector<float> results;
+        int to_move;
+        int board_size;
 
-    std::vector<float> probabilities;
+        void step_stream(std::ostream &out);
+    };
 
-    std::vector<float> opponent_probabilities;
+    void scatch_step(GameState &state, Step &step) const;
+    void push_game_step(Step &step);
+    void adjust_game_steps(size_t size);
 
-    std::vector<int> ownership;
-
-    int final_score_idx;
-
-    std::vector<float> result;
-
-    int to_move;
-
-    int board_size;
-
-    void step_stream(std::ostream &out);
-  };
-
-  void scatch_step(GameState &state, Step &step) const;
-
-  void push_game_step(Step &step);
-
-  void adjust_game_steps(size_t size);
-
-  std::list<Step> game_steps;
-
+    std::list<Step> game_steps;
 };
 #endif

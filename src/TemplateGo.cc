@@ -1,35 +1,48 @@
 #include <iostream>
-#include <sstream>
 #include <memory>
-#include <string>
 
-#include "Board.h"
-#include "Utils.h"
 #include "config.h"
-#include "gtp.h"
+#include "ASCII.h"
+#include "GTP.h"
 
-using namespace std;
+static void ascii_loop() {
+    auto ascii = std::make_shared<ASCII>();
+}
 
-void normal_loop() {
-  auto maingame = std::make_shared<GameState>();
-  maingame->init_game(cfg_boardsize, cfg_komi);
-  gtp::init_engine(*maingame);
-
-  while (true) {
-    maingame->display(2);
-    auto input = std::string{};
-    Utils::auto_printf("TemplateGo : \n");
-    if (std::getline(std::cin, input)) {
-      gtp::execute(input);
-    }
-  }
+static void gtp_loop() {
+    auto gtp = std::make_shared<GTP>();
 }
 
 
+const static std::string get_License() {
+
+    auto out = std::ostringstream{};
+
+    out << "    ";
+    out << PROGRAM << " " << VERSION << " Copyright (C) 2020  Hung-Zhe, Lin"   << std::endl;
+
+    out << "    This program comes with ABSOLUTELY NO WARRANTY."               << std::endl;
+    out << "    This is free software, and you are welcome to redistribute it" << std::endl;
+    out << "    under certain conditions; see the COPYING file for details."   << std::endl;
+
+    return out.str();
+}
 
 int main(int argc, char **argv) {
-  gtp::set_up(argc, argv);
-  normal_loop();
 
-  return 0;
+    init_basic_parameters();
+    auto args = std::make_shared<ArgsParser>(argc, argv);
+
+    auto license = get_License();
+    Utils::auto_printf("%s\n", license.c_str());
+    args->dump();
+
+    if (option<std::string>("mode") == "ascii") {
+        ascii_loop();
+    } else if (option<std::string>("mode") == "gtp") {
+        gtp_loop();
+    }
+
+
+    return 0;
 }

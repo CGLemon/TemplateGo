@@ -11,26 +11,26 @@
 
 void Evaluation::initialize_network(int playouts,
                                     const std::string &weightsfile) {
-  m_network.initialize(playouts, weightsfile);
+    m_network.initialize(playouts, weightsfile);
 }
 
 Evaluation::NNeval Evaluation::network_eval(GameState &state,
                                             Network::Ensemble ensemble) {
-  return m_network.get_output(&state, ensemble);
+    return m_network.get_output(&state, ensemble);
 }
 
 void Evaluation::reload_network(std::string &weightsfile) {
-  m_network.reload_weights(weightsfile);
+    m_network.reload_weights(weightsfile);
 }
 
 void Evaluation::clear_cache() {
-  m_network.clear_cache();
+    m_network.clear_cache();
 }
 
 void Evaluation::release_nn() {
-  m_network.release_nn();
+    m_network.release_nn();
 }
 
-float Evaluation::get_fair_komi(GameState &state) {
-  return state.board.get_komi();
+void Evaluation::set_playouts(const int p) {
+    m_network.set_playouts(p);
 }

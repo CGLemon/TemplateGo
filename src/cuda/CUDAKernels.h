@@ -3,6 +3,7 @@
 #ifdef USE_CUDA
 #include <cassert>
 #include "cuda/CUDACommon.h"
+
 template <typename T>
 void cuda_add_vectors(T *c, T *a, T *b, int size, int asize, int bsize, bool relu);
 
@@ -36,7 +37,6 @@ void cuda_swap(T *a, T *b, int size);
 
 template<typename T>
 void cuda_copy(T *a, T *b, int size);
-
 
 #endif
 #endif

@@ -1,35 +1,174 @@
 #include "Engine.h"
+#include "Utils.h"
 #include <cassert>
 
-void Engine::init() {
-  evaluation = std::make_shared<Evaluation>();
-  evaluation->initialize_network(cfg_playouts, cfg_weightsfile);
-  trainer=std::make_shared<Trainer>();
-  search = std::make_shared<Search>(m_state, *evaluation, *trainer);
+void Engine::initialize() {
+    while (m_states.size() < (unsigned)option<int>("num_games")) {
+        m_states.emplace_back(std::make_shared<GameState>());
+    }
+
+    if (m_states.size() > (unsigned)option<int>("num_games")) {
+        m_states.resize((unsigned)option<int>("num_games"));
+    }
+    m_states.shrink_to_fit();
+
+    for (auto & s: m_states) {
+        s->init_game(option<int>("boardsize"), option<float>("komi"));
+    }
+
+    adjust_range(default_id, m_states.size());
+    m_state = m_states[default_id];
+
+
+    m_evaluation = std::make_shared<Evaluation>();
+    m_evaluation->initialize_network(option<int>("playouts"), option<std::string>("weights_file"));
+
+    m_trainer = std::make_shared<Trainer>();
+    m_search = std::make_shared<Search>(*m_state, *m_evaluation, *m_trainer);
 }
 
-int Engine::think(Search::strategy_t stg) {
-  return search->think(stg);
+Engine::~Engine() {
+    Utils::auto_printf("Engine was released\n");
 }
 
-void Engine::benchmark(int playouts) {
-  search->benchmark(playouts);
+void Engine::release() {
+    m_trainer.reset();
+    m_trainer = nullptr;
+
+    m_search.reset();
+    m_search = nullptr;
+
+    m_evaluation->release_nn();
+    m_evaluation.reset();
+    m_evaluation = nullptr;
 }
 
-void Engine::clear_state() {
-  const int boardsize = m_state.board.get_boardsize();
-  const float komi = m_state.board.get_komi();
-
-  assert(komi == cfg_komi && boardsize == cfg_boardsize);
-
-  m_state.init_game(cfg_boardsize, cfg_komi);
-  evaluation->clear_cache();
+void Engine::display() {
+    m_state->display(2);
 }
 
-float Engine::get_fair_komi() {
-  return evaluation->get_fair_komi(m_state);
+Engine::Response Engine::play_textmove(std::string input) {
+    m_state->play_textmove(input);
+    return Response{};
 }
 
-GameState& Engine::get_state() {
-  return m_state;
+Engine::Response Engine::showboard(int t) {
+    return m_state->display_to_string(t);
 }
+
+Engine::Response Engine::nn_rawout() {
+    const auto res = m_evaluation->network_eval(*m_state);
+    const auto pres = option<int>("float_precision");
+    auto out = std::ostringstream{};
+    out << "Winrate :" << std::endl;
+    out << " " <<  std::fixed << std::setprecision(pres) << res.winrate << std::endl;
+
+    const auto bsize = m_state->get_boardsize();
+    out << "Policy :" << std::endl;
+    for (int y = 0; y < bsize; ++y) {
+        for (int x = 0; x < bsize; ++x) {
+            auto idx = m_state->get_index(x, y);
+            out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.policy[idx];
+        }
+        out << std::endl;
+    }
+    out << "Pass :" << std::endl;
+    out << " " << std::setw(5) << std::fixed << std::setprecision(pres) << res.policy_pass << std::endl;
+
+    out << "Ownership :" << std::endl;
+    for (int y = 0; y < bsize; ++y) {
+        for (int x = 0; x < bsize; ++x) {
+            auto idx = m_state->get_index(x, y);
+            out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.ownership[idx];
+        }
+        out << std::endl;
+    }
+
+    out << "Multi-labeled :" << std::endl;
+    for (int i = 0; i < 10; ++i) {
+        out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.multi_labeled[i];
+    }
+    out << std::endl;
+    out << " " << std::setw(5 * 8) <<  std::fixed << std::setprecision(pres) << res.multi_labeled[10];
+    out << std::endl;
+    for (int i = 11; i < 21; ++i) {
+        out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.multi_labeled[i];
+    }
+
+    out << std::endl;
+    out << "Fianl Score :" << std::endl;
+    out << " " << std::setw(5) << std::fixed << std::setprecision(pres) << res.final_score << std::endl;
+
+    return out.str();
+}
+
+Engine::Response Engine::reset_boardsize(const int bsize) {
+    set_option("boardsize", bsize);
+    auto komi = m_state->get_komi();
+    m_state->init_game(bsize, komi);
+    return Response{};
+}
+
+Engine::Response Engine::reset_komi(const float komi) {
+    set_option("komi", komi);
+    m_state->set_komi(komi);
+    return Response{};
+}
+
+Engine::Response Engine::input_features() {
+    return Model::features_to_string(*m_state);
+}
+
+Engine::Response Engine::undo_move() {
+    m_state->undo_move();
+    if (m_state->get_komi() != option<float>("komi")) {
+        m_state->set_komi(option<float>("komi"));
+    }
+    return Response{};
+}
+
+Engine::Response Engine::think(const int color) {
+    if (color == Board::BLACK || color == Board::WHITE) {
+        m_state->set_to_move(color);
+    }
+    auto move = m_search->think();
+    m_state->play_move(move);
+    return m_state->vertex_to_string(move);
+}
+
+Engine::Response Engine::self_play() {
+    while(!m_state->isGameOver()) {
+        auto move = m_search->think(Search::strategy_t::NN_UCT);
+        m_state->play_move(move);
+
+        auto res = m_state->vertex_to_string(move);
+        auto_printf("move = %s\n", res.c_str());
+        m_state->display(2);
+    }
+    m_trainer->gather_winner(*m_state);
+    return m_state->result_to_string();
+}
+
+Engine::Response Engine::dump_collect(std::string file) {
+    auto out = std::ostringstream{};
+    if (file == "std-output") {
+        m_trainer->data_stream(out);
+    } else {
+        m_trainer->save_data(file, true);
+        m_trainer->clear_game_steps();
+    }
+    return out.str();
+}
+
+Engine::Response Engine::set_playouts(const int p) {
+    m_evaluation->set_playouts(p);
+    return Response{};
+}
+
+Engine::Response Engine::clear_board() {
+    auto komi = m_state->get_komi();
+    auto bsize = m_state->get_boardsize();
+    m_state->init_game(bsize, komi);
+    return Response{};
+}
+

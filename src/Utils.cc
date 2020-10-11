@@ -1,11 +1,14 @@
-#include "Utils.h"
-
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
-#include <iostream>
-#include <mutex>
+#include <sstream>
+#include <algorithm>
+#include <stdexcept>
 
+#include "Utils.h"
+#include "config.h"
+
+namespace Utils {
 
 /*
 z_lookup 由下代碼產生，需要 boost 庫
@@ -124,7 +127,7 @@ static constexpr float z_lookup[z_entries] = {
 4.2856249809f, 4.2856040001f, 4.2855830193f, 4.2855620384f, 4.2855415344f, 4.2855205536f, 4.2854995728f, 4.2854790688f, 4.2854585648f, 4.2854375839f
 };
 
-float Utils::cached_t_quantile(int v) {
+float cached_t_quantile(int v) {
     if (v < 1) {
         return z_lookup[0];
     }
@@ -137,196 +140,461 @@ float Utils::cached_t_quantile(int v) {
     return z_lookup[z_entries - 1];
 }
 
+void auto_printf(const char *fmt, ...) {
 
-static std::mutex IOmutex;
+    if (option<bool>("quiet")) {
+        return;
+    }
 
-void Utils::static_printf(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  if (cfg_logfile_stream) {
-    std::lock_guard<std::mutex> lock(IOmutex);
-    vfprintf(cfg_logfile_stream, fmt, ap);
-  } else {
+    va_list ap;
+    va_start(ap, fmt);
     vfprintf(stdout, fmt, ap);
-  }
-  va_end(ap);
+    va_end(ap);
 }
 
+void auto_printf(std::ostringstream &out) {
 
-void Utils::auto_printf(const char *fmt, ...) {
-  if (cfg_quiet)
-    return;
+    if (option<bool>("quiet")) {
+        return;
+    }
 
-  va_list ap;
-  va_start(ap, fmt);
-  if (cfg_logfile_stream) {
-    std::lock_guard<std::mutex> lock(IOmutex);
-    vfprintf(cfg_logfile_stream, fmt, ap);
-  } else {
+    std::cout << out.str();
+}
+
+void gtp_output(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stdout, "= ");
     vfprintf(stdout, fmt, ap);
-  }
-  va_end(ap);
+    fprintf(stdout, "\n\n");
+    va_end(ap);
 }
 
-void Utils::stream_printf(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  if (cfg_logfile_stream) {
-    std::lock_guard<std::mutex> lock(IOmutex);
-    vfprintf(cfg_logfile_stream, fmt, ap);
-  }
-  va_end(ap);
+void gtp_fail(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stdout, "? ");
+    vfprintf(stdout, fmt, ap);
+    fprintf(stdout, "\n\n");
+    va_end(ap);
 }
 
-void Utils::gtp_printf(const char *fmt, ...) {
-  // if (!cfg_gtp_mode) return;
-
-  va_list ap;
-  va_start(ap, fmt);
-  fprintf(stdout, "= ");
-  vfprintf(stdout, fmt, ap);
-  fprintf(stdout, "\n\n");
-  va_end(ap);
+void space_stream(std::ostream &out, const size_t times) {
+    for (auto t = size_t{0}; t < times; ++t) {
+        out << " ";
+    }
 }
 
-void Utils::gtp_fail_printf(const char *fmt, ...) {
-  va_list ap;
-  va_start(ap, fmt);
-  fprintf(stdout, "? ");
-  vfprintf(stdout, fmt, ap);
-  fprintf(stdout, "\n\n");
-  va_end(ap);
+void strip_stream(std::ostream &out, const size_t times) {
+    for (auto t = size_t{0}; t < times; ++t) {
+        out << std::endl;
+    }
 }
 
-bool Utils::is_integer(std::string &number_str) {
-  const size_t size = number_str.size();
-  for (auto i = size_t{0}; i < size; ++i) {
-    const char res = number_str[i];
-    if (i == 0 && res == '-') {
-      continue;
+CommandParser::CommandParser(std::string input) {
+    parser(std::move(input));
+}
+
+CommandParser::CommandParser(int argc, char** argv) {
+    auto out = std::ostringstream{};
+    for (int i = 0; i < argc; ++i) {
+        out << argv[i] << " ";
+    }
+    parser(out.str());
+}
+
+bool CommandParser::valid() const {
+    return m_count != 0;
+}
+
+void CommandParser::parser(std::string &&input) {
+
+    m_count = 0;
+    auto stream = std::istringstream{input};
+    auto in = std::string{};
+    while (stream >> in) {
+        m_commands.emplace_back(std::make_shared<std::string>(in));
+        m_count++;
+    }
+}
+
+size_t CommandParser::get_count() const {
+    return m_count;
+}
+
+
+std::shared_ptr<CommandParser::Reuslt> CommandParser::get_command(size_t id) const {
+
+    if (!valid() || id > m_count) {
+        return nullptr;
     }
 
-    if (!is_number(res)) {
-      return false;
+    return std::make_shared<Reuslt>(Reuslt(*m_commands[id], (int)id));
+}
+
+std::shared_ptr<CommandParser::Reuslt> CommandParser::get_commands(size_t b) const {
+    return get_slice(b, m_count);
+}
+
+std::shared_ptr<CommandParser::Reuslt> CommandParser::get_slice(size_t b, size_t e) const {
+
+     if (!valid() || b >= m_count || e > m_count || b >= e) {
+         return nullptr;
+     }
+
+     auto out = std::ostringstream{};
+     auto begin = std::next(std::begin(m_commands), b);
+     auto end = std::next(std::begin(m_commands), e);
+     auto stop = std::prev(end, 1);
+
+     if (begin != end) {
+         std::for_each(begin, stop, [&](auto in)
+                                        {  out << *in << " "; });
+     }
+
+     out << **stop;
+     return std::make_shared<Reuslt>(Reuslt(out.str(), -1));
+}
+
+
+std::shared_ptr<CommandParser::Reuslt> CommandParser::find(const std::string input, int id) const {
+
+    if (!valid()) {
+        return nullptr;
     }
-  }
-  return true;
-}
 
-bool Utils::is_unsigned_integer(std::string &number_str) {
-  const size_t size = number_str.size();
-  for (auto i = size_t{0}; i < size; ++i) {
-    const char res = number_str[i];
-    if (!is_number(res)) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool Utils::is_number(char alpha) {
-  if (alpha >= '0' && alpha <= '9') {
-    return true;
-  }
-  return false;
-}
-
-bool Utils::is_float(std::string &float_str) {
-  const size_t size = float_str.size();
-  bool point_pass = false;
-  for (auto i = size_t{0}; i < size; ++i) {
-    const char res = float_str[i];
-    if (is_number(res) || res == '.' || res == '-' || res == '+') {
-      if ((res == '-' || res == '+') && i != 0) {
-        return false;
-      }
-      if (res == '.' && point_pass == false) {
-        point_pass = true;
-      } else {
-        return false;
-      }
+    if (id < 0) {
+        for (auto i = size_t{0}; i < get_count(); ++i) {
+            const auto res = get_command((size_t)i);
+            if (res->str == input) {
+                return res;
+            }
+        }
     } else {
-      return false;
+        if (const auto res = get_command((size_t)id)) {
+            return res->str == input ? res : nullptr;
+        }
     }
-  }
-  return true;
+
+    return nullptr;
 }
 
-std::uint64_t Utils::rng_seed(int times) {
-  std::uint64_t seed =
-      static_cast<std::uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
-  for (int i = 0; i < times; ++i) {
-    seed = seed * 16807ULL % 2147483647ULL;
-  }
-  return seed;
+std::shared_ptr<CommandParser::Reuslt> CommandParser::find(const std::vector<std::string> inputs, int id) const {
+
+    for (const auto &in : inputs) {
+        if (const auto res = find(in, id)) {
+            return res;
+        }
+    }
+
+    return nullptr;
 }
 
-Utils::Timer::Timer() {
-  clock();
-  record_count = 0;
+std::shared_ptr<CommandParser::Reuslt> CommandParser::find_next(const std::string input) const {
+
+    const auto res = find(input);
+
+    if (!res || res->idx+1 > (int)get_count()) {
+        return nullptr;
+    }
+
+    return get_command(res->idx+1);
 }
 
-void Utils::Timer::clock() {
-  m_clock_time = std::chrono::steady_clock::now();
+std::shared_ptr<CommandParser::Reuslt> CommandParser::find_next(const std::vector<std::string> inputs) const {
+
+    for (const auto &in : inputs) {
+        if (const auto res = find_next(in)) {
+            return res;
+        }
+    }
+
+    return nullptr;
 }
 
-int Utils::Timer::get_duration_seconds() const {
-  const auto end_time = std::chrono::steady_clock::now();
-  const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - m_clock_time).count();
-  return seconds;
+/*
+std::optional<CommandParser::Reuslt> CommandParser::get_command(size_t id) const {
+
+    if (!valid() || id > m_count) {
+        return std::nullopt;
+    }
+
+    return std::optional<Reuslt>(Reuslt(*m_commands[id], (int)id));
 }
 
-int Utils::Timer::get_duration_milliseconds() const {
-  const auto end_time = std::chrono::steady_clock::now();
-  const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - m_clock_time).count();
-  return milliseconds;
+std::optional<CommandParser::Reuslt> CommandParser::get_commands(size_t b) const {
+    return get_slice(b, m_count);
 }
 
-int Utils::Timer::get_duration_microseconds() const {
-  const auto end_time = std::chrono::steady_clock::now();
-  const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - m_clock_time).count();
-  return microseconds;
+std::optional<CommandParser::Reuslt> CommandParser::get_slice(size_t b, size_t e) const {
+
+     if (!valid() || b >= m_count || e > m_count || b >= e) {
+         return std::nullopt;
+     }
+
+     auto out = std::ostringstream{};
+     auto begin = std::next(std::begin(m_commands), b);
+     auto end = std::next(std::begin(m_commands), e);
+     auto stop = std::prev(end, 1);
+
+     if (begin != end) {
+         std::for_each(begin, stop, [&](auto in)
+                                        {  out << *in << " "; });
+     }
+
+     out << **stop;
+     return std::optional<Reuslt>(Reuslt(out.str(), -1));
 }
 
 
-float Utils::Timer::get_duration() const {
-  const auto seconds = get_duration_seconds();
-  const auto milliseconds = get_duration_milliseconds();
-  if (seconds == (milliseconds/1000)) {
-    return static_cast<float>(milliseconds) / 1000.f;
-  } else {
-    return static_cast<float>(seconds);
-  }
+std::optional<CommandParser::Reuslt> CommandParser::find(const std::string input, int id) const {
+
+    if (!valid()) {
+        return std::nullopt;
+    }
+
+    if (id < 0) {
+        for (auto i = size_t{0}; i < get_count(); ++i) {
+            const auto res = get_command((size_t)i);
+            if (res->str == input) {
+                return res;
+            }
+        }
+    } else {
+        if (const auto res = get_command((size_t)id)) {
+            return res->str == input ? res : std::nullopt;
+        }
+    }
+
+    return std::nullopt;
 }
 
-void Utils::Timer::record() {
-  m_record.emplace_back(get_duration());
-  record_count++;
-  assert(m_record.size() == record_count);
+std::optional<CommandParser::Reuslt> CommandParser::find(const std::vector<std::string> inputs, int id) const {
+
+    for (const auto &in : inputs) {
+        if (const auto res = find(in, id)) {
+            return res;
+        }
+    }
+
+    return std::nullopt;
 }
 
-void Utils::Timer::release() {
-  m_record.clear();
-  record_count = 0;
+std::optional<CommandParser::Reuslt> CommandParser::find_next(const std::string input) const {
+
+    const auto res = find(input);
+
+    if (!res || res->idx+1 > (int)get_count()) {
+        return std::nullopt;
+    }
+
+    return get_command(res->idx+1);
 }
 
-float Utils::Timer::get_record_time(int id) const {
-  if (record_count == 0) {
-    return 0.f;
-  }
-  if (id > record_count) {
-    id = record_count;
-  }
-  else if (id <= 0) {
-    id = 1;
-  }
-  return m_record[id-1];
+std::optional<CommandParser::Reuslt> CommandParser::find_next(const std::vector<std::string> inputs) const {
+
+    for (const auto &in : inputs) {
+        if (const auto res = find_next(in)) {
+            return res;
+        }
+    }
+
+    return std::nullopt;
+}
+ */
+
+template<>
+std::string CommandParser::Reuslt::get<std::string>() const {
+    return str;
 }
 
-int Utils::Timer::get_record_count() const {
-  return record_count;
+template<>
+int CommandParser::Reuslt::get<int>() const {
+    return std::stoi(str);
 }
 
-float* Utils::Timer::get_record() {
-  return m_record.data();
+template<>
+float CommandParser::Reuslt::get<float>() const{
+    return std::stof(str);
 }
+
+template<>
+const char* CommandParser::Reuslt::get<const char*>() const{
+    return str.c_str();
+}
+
+bool Option::boundary_valid() const {
+    option_handle();
+    return !(m_max == 0 && m_min == 0);
+}
+
+template<>
+Option Option::setoption<std::string>(std::string val, int /*max*/, int /*min*/) {
+    return Option{type::String, val, 0, 0};
+}
+
+template<>
+Option Option::setoption<bool>(bool val, int /*max*/, int /*min*/) {
+
+    if (val) {
+      return Option{type::Bool, "true", 0, 0};
+    }
+
+    return Option{type::Bool, "false", 0, 0};
+}
+
+template<>
+Option Option::setoption<int>(int val, int max, int min) {
+    auto op = Option{type::Integer, std::to_string(val), max, min};
+    op.adjust<int>();
+    return op;
+}
+
+template<>
+Option Option::setoption<float>(float val, int max, int min) {
+    auto op = Option{type::Float, std::to_string(val), max, min};
+    op.adjust<float>();
+    return op;
+}
+
+
+#define OPTION_EXPASSION(T)    \
+template<>                     \
+T Option::get<T>() const {     \
+    return (T)*this;           \
+}
+
+OPTION_EXPASSION(std::string)
+OPTION_EXPASSION(bool)
+OPTION_EXPASSION(float)
+OPTION_EXPASSION(int)
+
+template<>
+const char* Option::get<const char*>() const {
+    return m_value.c_str();
+}
+
+#undef OPTION_EXPASSION
+
+template<>
+void Option::set<std::string>(std::string value) {
+    option_handle();
+    m_value = value;
+}
+
+template<>
+void Option::set<bool>(bool value) {
+    option_handle();
+    if (value) {
+        m_value = std::string{"true"};
+    } else {
+        m_value = std::string{"false"};
+    }
+}
+
+template<>
+void Option::set<int>(int value) {
+    option_handle();
+    m_value = std::to_string(value);
+    adjust<int>();
+}
+
+template<>
+void Option::set<float>(float value) {
+    option_handle();
+    m_value = std::to_string(value);
+    adjust<float>();
+}
+
+void Option::option_handle() const {
+
+    if (m_max < m_min) {
+        auto out = std::ostringstream{};
+        out << " In option :";
+        out << " Max : " << m_max << " |";
+        out << " Min : " << m_min << " |";
+        out << " Minimal is bigger than maximal.";
+        out << " It is not accepted.";
+        throw std::runtime_error(out.str());
+    }
+
+    if (m_type == type::Invalid) {
+        auto out = std::ostringstream{};
+        out << " In option :";
+        out << " Please initialize first.";
+        throw std::runtime_error(out.str());
+    }
+};
+
+Timer::Timer() {
+    clock();
+    record_count = 0;
+}
+
+void Timer::clock() {
+    m_clock_time = std::chrono::steady_clock::now();
+}
+
+int Timer::get_duration_seconds() const {
+    const auto end_time = std::chrono::steady_clock::now();
+    const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(end_time - m_clock_time).count();
+    return seconds;
+}
+
+int Timer::get_duration_milliseconds() const {
+    const auto end_time = std::chrono::steady_clock::now();
+    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - m_clock_time).count();
+    return milliseconds;
+}
+
+int Timer::get_duration_microseconds() const {
+    const auto end_time = std::chrono::steady_clock::now();
+    const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - m_clock_time).count();
+    return microseconds;
+}
+
+
+float Timer::get_duration() const {
+    const auto seconds = get_duration_seconds();
+    const auto milliseconds = get_duration_milliseconds();
+    if (seconds == (milliseconds/1000)) {
+        return static_cast<float>(milliseconds) / 1000.f;
+    } else {
+        return static_cast<float>(seconds);
+    }
+}
+
+void Timer::record() {
+    m_record.emplace_back(std::move(get_duration()));
+    record_count++;
+    assert(m_record.size() == record_count);
+}
+
+void Timer::release() {
+    m_record.clear();
+    record_count = 0;
+}
+
+float Timer::get_record_time(size_t id) const {
+
+    if (record_count == 0) {
+        return 0.f;
+    }
+    if (id > record_count) {
+        id = record_count;
+    } 
+    else if (id <= 0) {
+        id = 1;
+    }
+    return m_record[id-1];
+}
+
+int Timer::get_record_count() const {
+    return record_count;
+}
+
+const std::vector<float>& Utils::Timer::get_record() const {
+    return m_record;
+}
+
+} // namespace Utils

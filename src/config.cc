@@ -1,260 +1,204 @@
 #include "config.h"
-#include "gtp.h"
+#include "Zobrist.h"
 #include "Utils.h"
-#include "Model.h"
 
 #include <string>
-#include <sstream>
-#include <fstream>
-#include <iostream>
+#include <mutex>
 
-bool cfg_quiet;
-FILE *cfg_logfile_stream;
-bool cfg_allowed_suicide;
-bool cfg_pre_block_superko;  // ignore
-bool cfg_gtp_mode;
+std::unordered_map<std::string, Utils::Option> options_map;
+// std::mutex map_mutex;
 
-float cfg_softmax_temp;
-int cfg_cache_moves;
-float cfg_cache_ratio;
-
-std::string cfg_weightsfile;
-int cfg_uct_threads;
-float cfg_fpu_root_reduction;
-float cfg_fpu_reduction;
-float cfg_logpuct;
-float cfg_puct;
-float cfg_logconst;
-float cfg_delta_attenuation_ratio;
-bool cfg_dirichlet_noise;
-
-int cfg_maintime;
-int cfg_byotime;
-int cfg_byostones;
-
-bool cfg_auto_quit;
-bool cfg_selfplay_agent;
-int cfg_random_move_cnt;
-int cfg_random_move_div;
-bool cfg_random_move;
-int cfg_boardsize;
-float cfg_komi;
-int cfg_playouts;
-float cfg_allow_pass_ratio;
-int cfg_batchsize;
-int cfg_waittime;
-bool cfg_ponder;
-size_t cfg_random_min_visits;
-
-float cfg_resign_threshold;
-
-size_t cfg_max_game_buffer;
-bool cfg_collect;
-
-int cfg_lable_komi;
-int cfg_lable_shift;
-float cfg_label_buffer;
-
-std::uint64_t cfg_default_seed;
-
-void dump_setting() {
-  Utils::auto_printf("Settings\n");
-  Utils::auto_printf(" batch size : %d\n", cfg_batchsize);
-  Utils::auto_printf(" thread(s) : %d\n", cfg_uct_threads);
-
-  Utils::auto_printf(" labl komi : %d\n", cfg_lable_komi);
-  Utils::auto_printf(" label buffer : %.2f%%\n", cfg_label_buffer * 100);
+#define OPTIONS_EXPASSION(T)                        \
+template<>                                          \
+T option<T>(std::string name) {                     \
+    return options_map.find(name)->second.get<T>(); \
 }
 
-void adjust_label_buffer(float &label_buffer) {
-  if (label_buffer < 0.0f) {
-    label_buffer = 0.0f;
-  } else if (label_buffer > 0.5f) {
-    label_buffer = 0.5f;
-  }
+OPTIONS_EXPASSION(std::string)
+OPTIONS_EXPASSION(bool)
+OPTIONS_EXPASSION(int)
+OPTIONS_EXPASSION(float)
+
+#undef OPTIONS_EXPASSION
+
+#define OPTIONS_SET_EXPASSION(T)                     \
+template<>                                           \
+bool set_option<T>(std::string name, T val) {        \
+    auto res = options_map.find(name);               \
+    if (res != std::end(options_map)) {              \
+        res->second.set<T>(val);                     \
+        return true;                                 \
+    }                                                \
+    return false;                                    \
 }
 
-void adjust_label_komi(int &label_komi) {
-  if (std::abs(label_komi) > LABELS_CENTER && label_komi > 0) {
-    label_komi = LABELS_CENTER;
-  } else if (std::abs(label_komi) > LABELS_CENTER && label_komi < 0) {
-    label_komi = -LABELS_CENTER;
-  }
+OPTIONS_SET_EXPASSION(std::string)
+OPTIONS_SET_EXPASSION(bool)
+OPTIONS_SET_EXPASSION(int)
+OPTIONS_SET_EXPASSION(float)
+
+#undef OPTIONS_SET_EXPASSION
+
+void init_options_map() {
+
+    options_map["name"] << Utils::Option::setoption(PROGRAM);
+    options_map["version"] << Utils::Option::setoption(VERSION);
+
+    options_map["mode"] << Utils::Option::setoption(std::string{"ascii"});
+    options_map["help"] << Utils::Option::setoption(false);
+
+    options_map["quiet"] << Utils::Option::setoption(false);
+    options_map["num_games"] << Utils::Option::setoption(1, 32, 1);
+    options_map["reserve_movelist"] << Utils::Option::setoption(60);
+    options_map["threads"] << Utils::Option::setoption(1, 256, 1);
+
+    // rules
+    options_map["allow_suicide"] << Utils::Option::setoption(false);
+    options_map["pre_block_superko"] << Utils::Option::setoption(false);
+    options_map["boardsize"] << Utils::Option::setoption(BOARD_SIZE, MARCO_BOARD_SIZE, MARCO_MINIMAL_GTP_BOARD_SIZE);
+    options_map["komi"] << Utils::Option::setoption(DEFAULT_KOMI, MARCO_MAXIMAL_KOMI, MARCO_MINIMAL_KOMI);
+
+    // io
+    options_map["float_precision"] << Utils::Option::setoption(5);
+
+    // network default parameters
+    options_map["weights_file"] << Utils::Option::setoption(std::string{"_NO_FILE_"});
+    options_map["softmax_temp"] << Utils::Option::setoption(1.0f);
+    options_map["cache_moves"] << Utils::Option::setoption(25);
+    options_map["mutil_labeled_komi"] << Utils::Option::setoption(0, 10, -10);
+    options_map["batchsize"] << Utils::Option::setoption(1, 32, 1);
+    options_map["waittime"] << Utils::Option::setoption(10);
+
+    // uct search
+    options_map["resigned_threshold"] << Utils::Option::setoption(0.1f, 1, 0);
+    options_map["allowed_pass_ratio"] << Utils::Option::setoption(0.8f, 1, 0);
+    options_map["playouts"] << Utils::Option::setoption(1600);
+    options_map["dirichlet_noise"] << Utils::Option::setoption(false);
+    options_map["fpu_root_reduction"] << Utils::Option::setoption(0.25f);
+    options_map["fpu_reduction"] << Utils::Option::setoption(0.25f);
+    options_map["logpuct"] << Utils::Option::setoption(0.015f);
+    options_map["logconst"] << Utils::Option::setoption(1.7f);
+    options_map["puct"] << Utils::Option::setoption(0.5f);
+    options_map["score_utility_div"] << Utils::Option::setoption(3.5f);
+    options_map["ponder"] << Utils::Option::setoption(false);
+
+    // time control paramters
+    options_map["maintime"] << Utils::Option::setoption(3600);
+    options_map["byotime"] << Utils::Option::setoption(0);
+    options_map["byostones"] << Utils::Option::setoption(0);
+    options_map["lagbuffer"] << Utils::Option::setoption(100.f);
+
+    // trainer
+    options_map["collect"] << Utils::Option::setoption(false); 
+    options_map["max_game_buffer"] << Utils::Option::setoption(1000);
+
+    // self-play
+    options_map["random_move"] << Utils::Option::setoption(false);
+    options_map["random_move_div"] << Utils::Option::setoption(1);
 }
 
-void adjust_batchsize(int batchsize) {
-  if (cfg_uct_threads < batchsize) {
-    cfg_batchsize = cfg_uct_threads;
-  }
-  if (cfg_batchsize == 0) {
-    cfg_batchsize = 1;
-  }
+void init_basic_parameters() {
+
+    Zobrist::init_zobrist();
+    init_options_map();
 }
 
-void arg_parser(int argc, char **argv) {
 
-  bool success = true;
-  auto warning_stream = std::stringstream{""};
-  warning_stream << "Warning!" << std::endl;
+ArgsParser::ArgsParser(int argc, char** argv) {
 
-  for (auto i = int{1}; i < argc; ++i) {
-    auto cmd = std::string{argv[i]};
+    auto parser = Utils::CommandParser(argc, argv);
 
-    if (cmd == "-g" || cmd == "--gtp") {
-      gtp::gtp_mode();
-    } else if (cmd == "-w" || cmd == "--weight") {
-      if ((i + 1) <= argc && argv[(i + 1)][0] != '-') {
-        i++;
-        auto filename = std::string{argv[i]};
-        cfg_weightsfile = filename;
-      }
-    } else if (cmd == "-p" || cmd == "--playouts") {
-      if ((i + 1) <= argc && argv[(i + 1)][0] != '-' ) {
-        i++;
-        auto numplayouts = std::string{argv[i]};
-        if (Utils::is_unsigned_integer(numplayouts)) {
-          cfg_playouts = std::stoi(numplayouts);
-        } else {
-          success = false;
-          warning_stream << cmd << " must be integer.\n";
+    const auto is_parameter = [](const std::string &para) -> bool {
+        if (para.empty()) {
+            return false;
         }
-      }
-    } else if (cmd == "-t" || cmd == "--threads") {
-      if ((i + 1) <= argc && argv[(i + 1)][0] != '-') {
-        i++;
-        auto numthreads = std::string{argv[i]};
-        if (Utils::is_unsigned_integer(numthreads)) {
-          cfg_uct_threads = std::stoi(numthreads);
-        } else {
-          success = false;
-          warning_stream << cmd << " must be integer.\n";
-        }
-      }
-    } else if (cmd == "--batchsize") {
-      if ((i + 1) <= argc && argv[(i + 1)][0] != '-') {
-        i++;
-        auto numbatch = std::string{argv[i]};
-        if (Utils::is_unsigned_integer(numbatch)) {
-          cfg_batchsize = std::stoi(numbatch);
-        } else {
-          success = false;
-          warning_stream << cmd << " must be integer.\n";
-        }
-      }
-    } else if (cmd == "--labelkomi") {
-      if ((i + 1) <= argc) {
-        i++;
-        auto label_komi = std::string{argv[i]};
-        if (Utils::is_integer(label_komi)) {
-          cfg_lable_komi = std::stoi(label_komi);
-        } else {
-          success = false;
-          warning_stream << cmd << " must be integer.\n";
-        }
-      }
-    } else if (cmd == "--labelbuffer") {
-      if ((i + 1) <= argc && argv[(i + 1)][0] != '-') {
-        i++;
-        auto label_buffer = std::string{argv[i]};
-        cfg_label_buffer = std::stof(label_buffer);
+        return para[0] != '-';
+    };
 
-        /*
-        if (Utils::is_float(label_buffer)) {
-          cfg_label_buffer = std::stof(label_buffer);
-          if (cfg_label_buffer < 0.0f) {
-            cfg_label_buffer = 0.0f;
-          }
-        } else {
-          success = false;
-          warning_stream << cmd << " must be float.\n";
-        }
-        */
-      }
-    }else if (cmd == "--no_resign") {
-      cfg_resign_threshold = -1.f;
-    } else if (cmd == "--noise") {
-      cfg_dirichlet_noise = true;
-    } else if (cmd == "--ponder") {
-      cfg_ponder = true;
-    } else if (cmd == "--random_move") {
-      cfg_random_move = true;
-    } else if (cmd == "--random_move_div") {
-      if ((i + 1) <= argc && argv[(i + 1)][0] != '-') {
-        i++;
-        auto div = std::string{argv[i]};
-        if (Utils::is_integer(div)) {
-          cfg_random_move_div = std::stoi(div);
-        } else {
-          success = false;
-          warning_stream << cmd << " must be integer.\n";
-        }
-      }
-    } else if (cmd == "--collect") {
-      cfg_collect = true;
-    } else {
-      success = false;
-      warning_stream << cmd << " not understood\n";
+    using List = std::vector<std::string>;
+
+    if (const auto help = parser.find(List{"--help", "-h"})) {
+        set_option("help", true);
     }
-  }
 
-  if (!success) {
-    Utils::auto_printf("%s\n", warning_stream.str().c_str());
-  }
+    if (const auto res = parser.find_next(List{"--weights", "-w"})) {
+        if (is_parameter(res->str)) {
+            set_option("weights_file", res->str);
+        }
+    }
 
-  adjust_label_buffer(cfg_label_buffer);
+    if (const auto res = parser.find_next(List{"--playouts", "-p"})) {
+        if (is_parameter(res->str)) {
+            set_option("playouts", res->get<int>());
+        }
+    }
 
-  adjust_label_komi(cfg_lable_komi);
+    if (const auto res = parser.find_next(List{"--threads", "-t"})) {
+        if (is_parameter(res->str)) {
+            set_option("threads", res->get<int>());
+        }
+    }
 
-  adjust_batchsize(cfg_batchsize);
+    if (const auto res = parser.find_next("--boardsize")) {
+        if (is_parameter(res->str)) {
+            set_option("boardsize", res->get<int>());
+        }
+    }
 
-  dump_setting();
+    if (const auto res = parser.find_next(List{"--batchsize", "-b"})) {
+        if (is_parameter(res->str)) {
+            set_option("batchsize", res->get<int>());
+        }
+    }
+
+    if (const auto res = parser.find_next("--komi")) {
+        if (is_parameter(res->str)) {
+            set_option("komi", res->get<float>());
+        }
+    }
+
+    if (const auto res = parser.find_next(List{"--mode", "-m"})) {
+        if (is_parameter(res->str)) {
+            if (res->str == "ascii" || res->str == "gtp") {
+                set_option("mode", res->str);
+            } else {
+                Utils::auto_printf("syntax not understood : %s\n", res->get<const char*>());
+            }
+        }
+    }
+
+    if (const auto res = parser.find_next("--resigned")) {
+        if (is_parameter(res->str)) {
+            set_option("resigned_threshold", res->get<float>());
+        }
+    }
+
+    if (const auto res = parser.find("--collect")) {
+        set_option("collect", true);
+    }
+
+    if (option<std::string>("mode") == "gtp") {
+        set_option("quiet", true);
+    }
 }
 
-void init_cfg() {
-  cfg_quiet = false;
-  cfg_logfile_stream = nullptr;
-  cfg_allowed_suicide = false;
-  cfg_gtp_mode = false;
-  cfg_softmax_temp = 1.0f;
-  cfg_cache_moves = 5;
-  cfg_cache_ratio = 0.2f;
-
-  cfg_weightsfile = "_NO_WEIGHTS_FILE_";
-  cfg_uct_threads = 1;
-  cfg_fpu_root_reduction = 0.25f;
-  cfg_fpu_reduction = 0.25f;
-  cfg_logpuct = 0.015f;
-  cfg_puct = 0.5f;
-  cfg_logconst = 1.7f;
-  cfg_dirichlet_noise = false;
-  cfg_ponder = false;
-
-  cfg_maintime = 60 * 60 * 1;
-  cfg_byotime = 0;
-  cfg_byostones = 0;
-
-  cfg_auto_quit = false;
-
-  cfg_selfplay_agent = false;
-  cfg_random_move_cnt = 0;
-  cfg_random_move_div = 4;
-  cfg_random_move = false;
-  cfg_boardsize = DEFULT_BOARDSIZE;
-  cfg_komi = DEFULT_KOMI;
-  cfg_playouts = 1600;
-  cfg_random_min_visits = 1;
-  cfg_allow_pass_ratio = 0.5f;
-  cfg_batchsize = 1;
-  cfg_waittime = 10;
-  
-  cfg_resign_threshold = 0.05f;
-
-  cfg_max_game_buffer = 9999;
-  cfg_collect = false;
-
-  cfg_default_seed = Utils::rng_seed();
-
-  cfg_lable_komi = 0;
-  cfg_lable_shift = 0;
-  cfg_label_buffer = 0.5f;
+void ArgsParser::help() const {
+    Utils::auto_printf("Argumnet\n");
+    Utils::auto_printf(" --help, -h\n");
+    Utils::auto_printf(" --mode, -m [ascii/gtp]\n");
+    Utils::auto_printf(" --playouts, -p <integral>\n");
+    Utils::auto_printf(" --threads, -t <integral>\n");
+    Utils::auto_printf(" --weights, -w <weights file>\n");
+    Utils::auto_printf(" --komi <float>\n");
+    Utils::auto_printf(" --boardsize <integral>\n");
+    Utils::auto_printf(" --batchsize, -b <integral>\n");
 }
+
+void ArgsParser::dump() const {
+    if (option<bool>("help")) {
+        help();
+    }
+    Utils::auto_printf("Threads : %d\n", option<int>("threads"));
+    Utils::auto_printf("Batchsize : %d\n", option<int>("batchsize"));
+}
+
