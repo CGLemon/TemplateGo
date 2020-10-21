@@ -1,5 +1,6 @@
 #include "Engine.h"
 #include "Utils.h"
+#include "Model.h"
 #include <cassert>
 
 void Engine::initialize() {
@@ -57,11 +58,18 @@ Engine::Response Engine::showboard(int t) {
 }
 
 Engine::Response Engine::nn_rawout() {
-    const auto res = m_evaluation->network_eval(*m_state);
-    const auto pres = option<int>("float_precision");
+    auto res = m_evaluation->network_eval(*m_state);
+    auto pres = option<int>("float_precision");
     auto out = std::ostringstream{};
+
+    out << "Winrate Misc :" << std::endl;
+    out << " " <<  std::fixed << std::setprecision(pres) << res.alpha << std::endl;
+    out << " " <<  std::fixed << std::setprecision(pres) << res.beta << std::endl;
+    out << " " <<  std::fixed << std::setprecision(pres) << res.gamma << std::endl;
+
+    const auto w = Model::get_winrate(*m_state, res);
     out << "Winrate :" << std::endl;
-    out << " " <<  std::fixed << std::setprecision(pres) << res.winrate << std::endl;
+    out << " " <<  std::fixed << std::setprecision(pres) << w << std::endl;
 
     const auto bsize = m_state->get_boardsize();
     out << "Policy :" << std::endl;
@@ -83,18 +91,6 @@ Engine::Response Engine::nn_rawout() {
         }
         out << std::endl;
     }
-
-    out << "Multi-labeled :" << std::endl;
-    for (int i = 0; i < 10; ++i) {
-        out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.multi_labeled[i];
-    }
-    out << std::endl;
-    out << " " << std::setw(5 * 8) <<  std::fixed << std::setprecision(pres) << res.multi_labeled[10];
-    out << std::endl;
-    for (int i = 11; i < 21; ++i) {
-        out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.multi_labeled[i];
-    }
-
     out << std::endl;
     out << "Fianl Score :" << std::endl;
     out << " " << std::setw(5) << std::fixed << std::setprecision(pres) << res.final_score << std::endl;

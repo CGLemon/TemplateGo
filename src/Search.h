@@ -26,8 +26,8 @@ public:
 
     void from_score(GameState &state) {
         m_nn_outout = std::make_shared<NNOutput>();
-        const auto addition_komi = option<int>("mutil_labeled_komi");
-        const auto board_score = state.final_score(addition_komi);
+        // const auto addition_komi = option<int>("mutil_labeled_komi");
+        const auto board_score = state.final_score();
 
         if (board_score > 0.0f) {
             m_nn_outout->eval = 1.0f;
@@ -78,7 +78,7 @@ private:
     int nn_direct_output();
     int random_move(bool allow_pass);
 
-    // About UCT
+    // About UCT search
     bool is_in_time(const float max_time);
     void play_simulation(GameState &currstate, UCTNode *const node,
                        UCTNode *const root_node, SearchResult &search_result);

@@ -84,7 +84,7 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         } else {
             out << "syntax error : boardsize <integral>";
         }
-    } else if (const auto res = parser.find("input-features", 0)) {
+    } else if (const auto res = parser.find("input-pattens", 0)) {
         lambda_syntax_not_understood(parser, 1);
         out << m_ascii_engine->input_features();
     } else if (const auto res = parser.find("genmove", 0)) {

@@ -23,18 +23,22 @@ public:
 
 private:
     struct Step {
-        std::vector<int> input_planes;
+        std::vector<char> input_planes;
         std::vector<float> input_features; 
         std::vector<float> probabilities;
         std::vector<float> opponent_probabilities;
         std::vector<int> ownership;
 
-        float final_score;
-        int final_score_idx;
-        std::vector<float> results;
+        int final_score;  // Actually, This is score on board. Do Not add komi.
+
+        // int final_score_idx;
+        // std::vector<float> results;
+
+        float result;
         int to_move;
         int board_size;
 
+        float current_komi;
         void step_stream(std::ostream &out);
     };
 

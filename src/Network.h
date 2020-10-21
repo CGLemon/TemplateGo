@@ -40,6 +40,12 @@ private:
                      Network::Netresult &result,
                      const int symmetry = -1);
 
+    void dummy_forward(std::vector<float> &policy,
+                       std::vector<float> &ownership,
+                       std::vector<float> &final_score,
+                       std::vector<float> &values);
+
+
     Netresult get_output_internal(const GameState *const state,
                                   const int symmetry);
   

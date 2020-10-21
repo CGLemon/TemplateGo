@@ -53,7 +53,7 @@ static const std::vector<std::string> gtp_commands = {"protocol_version",
 
 void GTP::execute(Utils::CommandParser &parser) {
 
-    static constexpr int GTP_VERSION = 2;
+    static constexpr auto GTP_VERSION = 2;
 
     if (const auto res = parser.find("protocol_version", 0)) {
         Utils::gtp_output("%d\n", GTP_VERSION);

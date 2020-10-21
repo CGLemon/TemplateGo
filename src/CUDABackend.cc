@@ -18,11 +18,11 @@ void CUDAbackend::initialize(std::shared_ptr<Model::NNweights> weights) {
     if (m_weights == nullptr) {
         m_weights = weights;
     }
-    if (m_graph == nullptr) {
+    if (valid() && m_graph == nullptr) {
         m_graph = std::make_shared<Graph>();
+        push_weights();
     }
     handel.apply();
-    push_weights();
     cuda_gpu_info();
     m_waittime.store(option<int>("waittime"));
 }
@@ -31,8 +31,10 @@ void CUDAbackend::initialize(std::shared_ptr<Model::NNweights> weights) {
 void CUDAbackend::reload(std::shared_ptr<Model::NNweights> weights) {
     release();
     m_weights = weights;
-    m_graph = std::make_shared<Graph>();
-    push_weights();
+    if (valid()) {
+        m_graph = std::make_shared<Graph>();
+        push_weights();
+    }
 }
 
 void CUDAbackend::forward(const int boardsize,
@@ -329,7 +331,7 @@ void CUDAbackend::batch_forward(const int batch_size,
     const size_t output_sb_s = batch * OUTPUTS_SCOREBELIEF * intersections * type_s;
     const size_t output_os_s = batch * OUTPUTS_OWNERSHIP * intersections * type_s;
     const size_t output_fs_s = batch * FINAL_SCORE * type_s;
-    const size_t output_winrate_s = batch * VALUE_LABELS * type_s;
+    const size_t output_winrate_s = batch * VALUE_MISC * type_s;
 
     ReportCUDAErrors(cudaMemcpy(temp_prob.data(), cuda_pol_op[1],
                                 output_prob_s, cudaMemcpyDeviceToHost));
@@ -485,7 +487,7 @@ void CUDAbackend::push_weights() {
     m_graph->
         winrate_fc = CudaFullyConnect(max_batchsize,
                                      OUTPUTS_VALUE,
-                                     VALUE_LABELS,
+                                     VALUE_MISC,
                                      false);
 
     m_scratch_size = 0;
@@ -609,7 +611,7 @@ void CUDAbackend::push_weights() {
                      max_batchsize * FINAL_SCORE  * type_s;
 
     const size_t output_val_s =
-                     max_batchsize * VALUE_LABELS * type_s;
+                     max_batchsize * VALUE_MISC * type_s;
 
 
     ReportCUDAErrors(cudaMalloc(&cuda_input_planes, planes_s));
@@ -671,4 +673,7 @@ void CUDAbackend::Graph::set_boardsize(int bsize) {
     v_gpool.set_convsize(bsize);
 }
 
+bool CUDAbackend::valid() {
+    return m_weights->loaded;
+}
 #endif

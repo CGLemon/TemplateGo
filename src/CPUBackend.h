@@ -19,6 +19,7 @@ public:
     virtual void reload(std::shared_ptr<Model::NNweights> weights);
     virtual void release();
     virtual void destroy() {}
+    virtual bool valid();
 
 private:
     std::shared_ptr<Model::NNweights> m_weights{nullptr};

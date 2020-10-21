@@ -17,8 +17,6 @@
 #include <utility>
 #include <vector>
 
-
-
 UCTNode::UCTNode(std::shared_ptr<UCTData> data) {
     m_data = data;
     assert(m_data->parameters);
@@ -119,7 +117,7 @@ bool UCTNode::expend_children(Evaluation &evaluation,
             legal_accumulate = 0.0f;
             legal_count = 0;
         }
-    
+
         nodelist.emplace_back(raw_netlist.policy_pass, Board::PASS);
         legal_accumulate += raw_netlist.policy_pass;
 
@@ -128,6 +126,7 @@ bool UCTNode::expend_children(Evaluation &evaluation,
             legal_accumulate = 1.0f;
         }
     }
+
     assert(legal_accumulate != 0.0f);
 
     for (auto &node : nodelist) {
@@ -166,7 +165,8 @@ void UCTNode::link_nn_output(GameState &state,
     const size_t intersections = state.get_intersections();
 
     // Put network evaluation into node.
-    const auto stm_eval = raw_netlist.winrate;
+    const auto winrate = Model::get_winrate(state, raw_netlist);
+    const auto stm_eval = winrate;
     if (color == Board::WHITE) {
         m_raw_black_eval = 1.0f - stm_eval;
     } else {
@@ -807,8 +807,8 @@ bool Heuristic::should_be_resign(GameState &state, UCTNode *node, float threshol
 bool Heuristic::pass_to_win(GameState &state) {
     if (state.board.get_last_move() == Board::PASS) {
         const auto color = state.get_to_move();
-        const auto addition_komi = option<int>("mutil_labeled_komi");
-        const auto res = state.final_score(addition_komi);
+        // const auto addition_komi = option<int>("mutil_labeled_komi");
+        const auto res = state.final_score();
         if (color == Board::BLACK && res > 0.f) {
             return true;
         } else if (color == Board::WHITE && res < 0.f) {

@@ -114,7 +114,7 @@ bool Network::probe_cache(const GameState *const state,
     const bool success = m_cache.lookup(state->board.get_hash(), result);
 
     if (success) {
-        result = Model::get_result_form_cache(result);
+        // result = Model::get_result_form_cache(result);
     }
 
   // If we are not generating a self-play game, try to find
@@ -144,6 +144,33 @@ if (!cfg_noise && !cfg_random_cnt
     return success;
 }
 
+void Network::dummy_forward(std::vector<float> &policy,
+                            std::vector<float> &ownership,
+                            std::vector<float> &final_score,
+                            std::vector<float> &values) {
+
+    auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
+    auto dis = std::uniform_real_distribution<float>(0.0, 1.0);
+    for (auto & p : policy) {
+        p = dis(rng);
+    }
+    const auto acc = std::accumulate(std::begin(policy),
+                                         std::end(policy), 0.0f);
+    for (auto & p : policy) {
+        p /= acc;
+    }
+
+    values[0] = 0.0f;
+    values[1] = 1.0f;
+    values[2] = 0.0f;
+
+    for (auto &owner : ownership) {
+        owner = 0.0f;
+    }
+
+    final_score[0] = 0.0f;
+}
+
 Network::Netresult Network::get_output_internal(const GameState *const state,
                                                 const int symmetry) {
     assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
@@ -152,15 +179,17 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
     auto scorebelief_out = std::vector<float>(OUTPUTS_SCOREBELIEF * NUM_INTERSECTIONS);
     auto finalscore_out = std::vector<float>(FINAL_SCORE);
     auto ownership_out = std::vector<float>(OUTPUTS_OWNERSHIP * NUM_INTERSECTIONS);
-    auto winrate_out = std::vector<float>(VALUE_LABELS);
-
+    auto winrate_out = std::vector<float>(VALUE_MISC);
 
     const auto boardsize = state->board.get_boardsize();
     const auto input_planes = Model::gather_planes(state, symmetry);
     const auto input_features = Model::gather_features(state);
-
-    m_forward->forward(boardsize, input_planes, input_features,
-                       policy_out, scorebelief_out, ownership_out, finalscore_out, winrate_out);
+    if (m_forward->valid()) {
+        m_forward->forward(boardsize, input_planes, input_features,
+                           policy_out, scorebelief_out, ownership_out, finalscore_out, winrate_out);
+    } else {
+        dummy_forward(policy_out, ownership_out, finalscore_out, winrate_out);
+    }
 
     const auto result = Model::get_result(state,
                                           policy_out,

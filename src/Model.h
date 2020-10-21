@@ -13,8 +13,7 @@
 #include "Blas.h"
 #include "Utils.h"
 
-static constexpr auto INPUT_CHANNELS = 18;
-
+static constexpr auto INPUT_CHANNELS = 24;
 static constexpr auto INPUT_FEATURES = 10;
 
 static constexpr auto OUTPUTS_POLICY = 32;
@@ -22,12 +21,13 @@ static constexpr auto OUTPUTS_PRBAOBILITIES = 1;
 static constexpr auto OUTPUTS_PASS = 1;
 
 static constexpr auto OUTPUTS_VALUE = 64;
-static constexpr auto OUTPUTS_SCOREBELIEF = 4;
+static constexpr auto OUTPUTS_SCOREBELIEF = 2;
 static constexpr auto OUTPUTS_OWNERSHIP = 1;
 
 static constexpr auto FINAL_SCORE = 1;
-static constexpr auto VALUE_LABELS = 21;
-static constexpr auto LABELS_CENTER = 10;
+static constexpr auto VALUE_MISC = 3;
+// static constexpr auto VALUE_LABELS = 21;
+// static constexpr auto LABELS_CENTER = 10;
 static constexpr auto POTENTIAL_MOVES = NUM_INTERSECTIONS + 1;
 
 struct Desc {
@@ -112,6 +112,7 @@ struct Model {
         virtual void reload(std::shared_ptr<Model::NNweights> weights) = 0;
         virtual void release() = 0;
         virtual void destroy() = 0;
+        virtual bool valid() = 0;
     };
 
     static void loader(const std::string &filename,
@@ -133,11 +134,12 @@ struct Model {
                                std::vector<float> &score_belief,
                                std::vector<float> &ownership,
                                std::vector<float> &final_score,
-                               std::vector<float> &value,
+                               std::vector<float> &values,
                                const float softmax_temp,
                                const int symmetry);
 
-    static NNResult get_result_form_cache(NNResult result);
+    static float get_winrate(GameState &state, const NNResult &result);
+    static float get_winrate(const NNResult &result, float current_komi);
 
     static void winograd_transform(std::shared_ptr<NNweights> &nn_weight);
 

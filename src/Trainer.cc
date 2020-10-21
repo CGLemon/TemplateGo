@@ -15,6 +15,22 @@
 using namespace Utils;
 
 void Trainer::Step::step_stream(std::ostream &out) {
+
+   /*
+    * The each training data is consist of 9 different datas.
+    * Thay are:
+    *
+    * 1. board size
+    * 2. current player komi
+    * 3. input binary planes
+    * 4. input features
+    * 5. current player probabilities
+    * 6. next player probabilities
+    * 7. current player ownership
+    * 8. current player final score (without komi)
+    * 9. winner
+    *
+    */
   
     const auto lambda_pow = [](const int base, const int exp) -> float {
         int val = 1;
@@ -37,15 +53,17 @@ void Trainer::Step::step_stream(std::ostream &out) {
         out << *e << std::endl;
     };
 
-    // Board size in this game. 
+    // 1. board size at this game.
     out << board_size << std::endl;
 
-    // Inputs
+    // 2. current komi at this game.
+    out << current_komi << std::endl;
+
+    // 3. input binary planes
     const auto input_planes_size = input_planes.size(); 
     auto idx = size_t{0};
     while (idx < input_planes_size) {
         auto hex = 0;
-
         for (auto i = size_t{0}; i < 4; ++i) {
             hex += input_planes[idx] * lambda_pow(2, (3 - i));
             idx++;
@@ -58,21 +76,21 @@ void Trainer::Step::step_stream(std::ostream &out) {
     assert(idx == input_planes_size);
     out << std::dec << std::endl;
 
+    // 4. input features
     lambda_array_to_stream(input_features, out);
 
-    // Probabilities
+    // 5. and 6. Probabilities
     lambda_array_to_stream(probabilities, out);
     lambda_array_to_stream(opponent_probabilities, out);
 
-    // Ownership
+    // 7. Ownership
     lambda_array_to_stream(ownership, out);
 
-    // Final score
+    // 8. Final score
     out << final_score << std::endl;
-    out << final_score_idx << std::endl;
 
-    // Multi-labeled value
-    lambda_array_to_stream(results, out);
+    // 9. Winner
+    out << result << std::endl;
 }
 
 bool gather_probabilities(GameState &state, UCTNode &node, std::vector<float> &probabilities, float temperature) {
@@ -83,7 +101,6 @@ bool gather_probabilities(GameState &state, UCTNode &node, std::vector<float> &p
     if (probabilities.size() != intersections+1) {
         return false;
     }
-
 
     auto factor = double{0.0f};
     auto tot_visits = size_t{0};
@@ -129,14 +146,14 @@ bool gather_probabilities(GameState &state, UCTNode &node, std::vector<float> &p
     return true;
 }
 
+// Record the step from MCTS.
 void Trainer::gather_step(GameState &state, UCTNode &node) {
 
     if (!option<bool>("collect")) {
         return;
     }
 
-    const size_t boardsize = state.board.get_boardsize();
-    const size_t intersections = boardsize * boardsize;
+    const auto intersections = state.get_intersections();
     auto step = Step{};
     auto to_move = state.board.get_to_move();
     assert(to_move == node.get_color());
@@ -183,18 +200,28 @@ void Trainer::gather_step(GameState &state, const int vtx) {
 }
 
 void Trainer::scatch_step(GameState &state, Step &step) const {
+    // input binary planes
     const auto planes = 
         Model::gather_planes(&state, Board::IDENTITY_SYMMETRY);
 
-    step.input_planes = std::vector<int>(planes.size(), 0);
+    step.input_planes = std::vector<char>(planes.size(), 0);
     for (auto idx = size_t{0}; idx < planes.size(); ++idx) {
         step.input_planes[idx] =
             static_cast<char>(planes[idx]);
     }
 
+    // input features
     step.input_features = Model::gather_features(&state);
+
+    // current player color
     step.to_move = state.board.get_to_move();
+
+    // current game board size
     step.board_size = state.board.get_boardsize();
+
+    // current komi.
+    const auto komi = state.get_komi();
+    step.current_komi = (step.to_move == Board::BLACK ? komi : -komi);
 }
 
 
@@ -213,37 +240,18 @@ void Trainer::gather_winner(GameState &state) {
     const auto intersections = state.get_intersections();
     const auto ownership = state.board.get_ownership();
     const auto distance = state.board.area_distance();
-    const auto final_score = state.final_score();
-  
-    auto ml_result = std::vector<int>{};
-
-    for (int i = 0; i < 21; ++i) {
-        const auto addtion_komi = i - 10;
-        const auto board_score = state.final_score((float)addtion_komi);
-        auto ml_winner = Board::INVAL;
-        if (board_score == 0.0f) {
-            ml_winner = Board::EMPTY;
-        } else if (board_score < 0.0f) {
-            ml_winner = Board::WHITE;
-        } else if (board_score > 0.0f) {
-            ml_winner = Board::BLACK;
-        }
-        assert(ml_winner != Board::INVAL);
-        ml_result.emplace_back(ml_winner);
-    } 
-
+    assert(winner != Board::INVAL);
 
     for (auto &step : game_steps) {
         assert(board_size == step.board_size);
-        for(auto &ml_winner : ml_result) {
-            if (ml_winner == Board::EMPTY) {
-                step.results.emplace_back(0.0f);
+
+        if (winner == Board::EMPTY) {
+            step.result = 0.0f;
+        } else {
+            if (winner == step.to_move) {
+                step.result = 1.0f;
             } else {
-                if (step.to_move == ml_winner) {
-                    step.results.emplace_back(1.0f);
-                } else {
-                    step.results.emplace_back(-1.0f);
-                }
+                step.result = -1.0f;
             }
         }
 
@@ -253,24 +261,16 @@ void Trainer::gather_winner(GameState &state) {
         for (auto &color : ownership) {
             assert(color != Board::INVAL);
             if (step.to_move == color) {
-                step.ownership.emplace_back(1);
+                step.ownership.emplace_back(1.0f);
             } else if ((!step.to_move) == color) {
-                step.ownership.emplace_back(-1);
+                step.ownership.emplace_back(-1.0f);
             } else if (color == Board::EMPTY) {
-                step.ownership.emplace_back(0);
+                step.ownership.emplace_back(0.0f);
             }
         }
         assert(step.ownership.size() == ownership.size());
-
         step.final_score =
-            (step.to_move == Board::BLACK) ? final_score : (-final_score);
-        auto final_score_idx = 2 * (distance - state.board.get_komi_integer());
-        if (state.board.get_komi_float() > 0.0f) {
-            final_score_idx += 1;
-        }
-
-        step.final_score_idx =
-            (step.to_move == Board::BLACK) ? final_score_idx : (-final_score_idx);
+            (step.to_move == Board::BLACK) ? distance : (-distance);
     }
 
     const auto end = std::end(game_steps);

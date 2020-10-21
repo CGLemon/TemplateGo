@@ -233,11 +233,63 @@ void fill_move_plane(const std::shared_ptr<Board> board,
     plane[sym_idx] = static_cast<float>(true);
 }
 
+void fill_seki_plane(const std::shared_ptr<Board> board,
+                     std::vector<float>::iterator plane,
+                     const int symmetry) {
+
+    const auto ownership = board->get_ownership();
+    const auto intersections = board->get_intersections();
+
+    for (int idx = 0; idx < intersections; ++idx) {
+        const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
+        if (ownership[idx] == Board::EMPTY) {
+            plane[sym_idx] = static_cast<float>(true);
+        }
+    }
+}
+
 
 std::vector<float> Model::gather_planes(const GameState *const state, 
                                         const int symmetry) {
     static constexpr auto PAST_MOVES = 3;
     static constexpr auto INPUT_PAIRS = 6;
+
+   /*
+    * 
+    * Plane  1: current player now stones on board.
+    * Plane  2: current player one past move stones on board.
+    * Plane  3: current player two past move stones on board.
+    *
+    * Plane  4: current player one liberty strings.
+    * Plane  5: current player two liberties strings.
+    * Plane  6: current player three liberties strings.
+    *
+    * Plane  7: next player now stones on board.
+    * Plane  8: next player one past move stones on board.
+    * Plane  9: next player two past move stones on board.
+    *
+    * Plane 10: current player one liberty strings.
+    * Plane 11: current player two liberties strings.
+    * Plane 12: current player three liberties strings.
+    *
+    * Plane 13: ko move (one hot)
+    *
+    * Plane 14: now move (one hot)
+    * Plane 15: one past move (one hot)
+    * Plane 16: two past move (one hot)
+    *
+    * Plane 17: seki point
+    *
+    * Plane 18: empty
+    * Plane 19: empty
+    * Plane 20: empty
+    * Plane 21: empty
+    * Plane 22: empty
+    *
+    * Plane 23: black or white
+    * Plane 24: always one
+    *
+    */
 
     const int intersections = state->board.get_intersections();
 
@@ -254,7 +306,7 @@ std::vector<float> Model::gather_planes(const GameState *const state,
 
     const auto moves =
         std::min<size_t>(state->board.get_movenum() + 1, PAST_MOVES);
-
+    // plane 1 to 3 and plane 7 to 9  
     for (auto h = size_t{0}; h < moves; ++h) {
         fill_color_plane_pair(state->get_past_board(h),
                               black_it + h * intersections,
@@ -264,40 +316,65 @@ std::vector<float> Model::gather_planes(const GameState *const state,
     black_it += PAST_MOVES * intersections;
     white_it += PAST_MOVES * intersections;
 
+    // plane 4 to 6 and plane 10 to 12  
     for (int c = 0; c < 3; ++c) {
         fill_libs_plane_pair(state->get_past_board(0),
                              black_it + c * intersections,
                              white_it + c * intersections,
                              c+1, symmetry);
     }
-    iterate += 2 * INPUT_PAIRS * intersections;
+    // iterate += 2 * INPUT_PAIRS * intersections;
+    std::advance(iterate, 2 * INPUT_PAIRS * intersections);
 
-
+    // plane 13
     fill_ko_plane(state->get_past_board(0),
                   iterate, symmetry);
-    iterate += intersections;
+    // iterate += intersections;
+    std::advance(iterate, intersections);
 
+    // plane 14 to 16
     for (auto h = size_t{0}; h < moves; ++h) {
         fill_move_plane(state->get_past_board(h),
                         iterate + h * intersections,
                         symmetry);
     }
-    iterate += PAST_MOVES * intersections;
+    // iterate += PAST_MOVES * intersections;
+    std::advance(iterate, PAST_MOVES * intersections);
 
+    // plane 17
+    fill_seki_plane(state->get_past_board(0),
+                    iterate,
+                    symmetry);
+    // iterate += intersections;
+    std::advance(iterate,  intersections);
+
+    // plane 18 to 22
+    // Empty
+    // iterate += 5 * intersections;
+    std::advance(iterate, 5 * intersections);
+
+    // plane 23
     if (blacks_move) {
         std::fill(iterate, iterate+intersections, static_cast<float>(true));
     }
-    iterate += intersections;
+    // iterate += intersections;
+    std::advance(iterate,  intersections);
 
+    // plane 24
     std::fill(iterate, iterate+intersections, static_cast<float>(true));
+    // iterate += intersections;
+    std::advance(iterate,  intersections);
+
+    assert(iterate == std::end(input_data));
 
     return input_data;
 }
 
 std::vector<float> Model::gather_features(const GameState *const state) {
 
-    static constexpr auto FEATURE_PASS = 5;
-    static constexpr auto FEATURE_KO = 3;
+    static constexpr auto FEATURE_PASS = 6;
+    static constexpr auto FEATURE_KO = 4;
+    // static constexpr auto FEATURE_MISC = 2;
 
     auto input_data = std::vector<float>(INPUT_FEATURES, 0.0f);
   
@@ -314,12 +391,12 @@ std::vector<float> Model::gather_features(const GameState *const state) {
     }
     roll += FEATURE_PASS;
 
-    const auto komi = state->board.get_komi();
-    input_data[roll] = komi / 15.0f;
+    // const auto komi = state->board.get_komi();
+    // input_data[roll] = komi / 15.0f;
   
-    const auto boardsize = state->board.get_boardsize();
-    input_data[roll + 1] = boardsize / 5.0f;
-    roll += 2;
+    // const auto boardsize = state->board.get_boardsize();
+    // input_data[roll + 1] = boardsize / 5.0f;
+    // roll += FEATURE_MISC;
 
     const auto ko_past =
         std::min<size_t>(state->board.get_movenum() + 1, FEATURE_KO);
@@ -375,7 +452,7 @@ NNResult Model::get_result(const GameState *const state,
                            std::vector<float> &score_belief,
                            std::vector<float> &ownership,
                            std::vector<float> &final_score,
-                           std::vector<float> &value,
+                           std::vector<float> &values,
                            const float softmax_temp,
                            const int symmetry) {
     NNResult result;
@@ -392,12 +469,6 @@ NNResult Model::get_result(const GameState *const state,
 
     // Score belief
     (void) score_belief;
-   /*
-    const auto score = Activation::Softmax(score_belief, softmax_temp);
-    for (auto idx = size_t{0}; idx < OUTPUTS_SCOREBELIEF * intersections; ++idx) {
-        result.score_belief[idx] = score[idx];
-    }
-    */
   
     // Ownership
     for (int idx = 0; idx < intersections; ++idx) {
@@ -408,35 +479,28 @@ NNResult Model::get_result(const GameState *const state,
     // Final score
     result.final_score = 20 * final_score[0];
 
-    // Map TanH output range [-1..1] to [0..1] range
-    for (auto idx = size_t{0}; idx < VALUE_LABELS; ++idx) {
-        const auto winrate = (1.0f + std::tanh(value[idx])) / 2.0f;
-        result.multi_labeled[idx] = winrate;
-    }
 
-    int label_choice = LABELS_CENTER + option<int>("mutil_labeled_komi"); // + cfg_lable_komi + cfg_lable_shift;
-    if (label_choice < 0) {
-        label_choice = 0;
-    } else if (label_choice >= VALUE_LABELS) {
-        label_choice = VALUE_LABELS - 1;
-    }
-
-    result.winrate = result.multi_labeled[label_choice];
+    // Winrate misc
+    result.alpha = values[0];
+    result.beta = values[1];
+    result.gamma = values[2];
 
     return result;
 }
 
-NNResult Model::get_result_form_cache(NNResult result) {
-    // 依據當前的動態貼目選擇新的勝率
-    int label_choice = LABELS_CENTER + option<int>("mutil_labeled_komi"); // + cfg_lable_komi + cfg_lable_shift;
-    if (label_choice < 0) {
-        label_choice = 0;
-    } else if (label_choice >= VALUE_LABELS) {
-        label_choice = VALUE_LABELS - 1;
-    }
-    result.winrate = result.multi_labeled[label_choice];
+float Model::get_winrate(GameState &state, const NNResult &result) {
+    const auto komi = state.get_komi();
+    const auto color = state.get_to_move();
+    const auto current_komi = (color == Board::BLACK ? komi : -komi);
+    return get_winrate(result, current_komi);
+}
 
-    return result;
+float Model::get_winrate(const NNResult &result, float current_komi) {
+    const auto alpha =  result.alpha;
+    const auto beta =  result.beta;
+    const auto gamme =  result.gamma;
+    auto winrate = std::tanh(((alpha - current_komi) / beta) + gamme);
+    return (winrate + 1.0f) / 2.0f;
 }
 
 void Model::winograd_transform(std::shared_ptr<NNweights> &nn_weight) {

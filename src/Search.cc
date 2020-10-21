@@ -227,8 +227,6 @@ void Search::updata_root(UCTNode *root_node) {
     auto_printf(" NN final score = ");
     auto_printf("%.2f\n", final_score);
 
-    auto_printf(" label komi = ");
-    auto_printf("%d\n", option<int>("mutil_labeled_komi"));
 }
 
 void Search::set_running(bool is_running) {
@@ -271,18 +269,19 @@ void Search::clear_nodes() {
     delete m_rootnode;
     m_rootnode = nullptr;
 
-    //bool success = true;
+    // bool success = true;
 
-    //success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
-    //success &= check_release(UCTNode::node_tree_size, sizeof(UCTNode), "Node");
-    //success &= check_release(DataBuffer::node_data_size, sizeof(DataBuffer), "Data");
+    // success &= check_release(Edge::edge_tree_size, sizeof(Edge), "Edge");
+    // success &= check_release(UCTNode::node_tree_size, sizeof(UCTNode), "Node");
+    // success &= check_release(DataBuffer::node_data_size, sizeof(DataBuffer), "Data");
 
-    //assert(success);
+    // assert(success);
 }
 
 void Search::play_simulation(GameState &currstate, UCTNode *const node,
                              UCTNode *const root_node, SearchResult &search_result) {
     node->increment_threads();
+
     if (node->expandable()) {
         if (currstate.get_passes() >= 2) {
             search_result.from_score(currstate);
@@ -299,10 +298,12 @@ void Search::play_simulation(GameState &currstate, UCTNode *const node,
     }
 
     if (node->has_children() && !search_result.valid()) {
+
         const int color = currstate.get_to_move();
         auto next = node->uct_select_child(color, node == root_node);
         auto move = next->get_vertex();
         currstate.play_move(move, color);
+
         if (move != Board::PASS && currstate.superko()) {
             next->invalinode();
         } else {

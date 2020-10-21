@@ -21,6 +21,8 @@ public:
     double logpuct;
     double puct;
     double score_utility_div;
+
+    float komi;
 };
 
 #endif

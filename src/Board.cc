@@ -1214,8 +1214,8 @@ std::vector<int> Board::get_ownership() const {
         for (int x = 0; x < m_boardsize; ++x) {
             const auto idx = get_index(x, y);
             const auto vtx = get_vertex(x, y);
-            // 如果盤面沒有棋子 "black" 和 "white" 都不會存在
             if ((black[vtx] && white[vtx]) || (!black[vtx] && !white[vtx])) {
+                // If there are no stones on board, this is seki case.
                 res[idx] = EMPTY;
             } else if (black[vtx]) {
                 res[idx] = BLACK;  

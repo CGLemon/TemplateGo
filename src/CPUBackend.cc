@@ -157,7 +157,7 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
                           output_fs, false);
 
     // winrate
-    FullyConnect::Forward(OUTPUTS_VALUE, VALUE_LABELS,
+    FullyConnect::Forward(OUTPUTS_VALUE, VALUE_MISC,
                           value_pool, 
                           m_weights->v_fc.weights,
                           m_weights->v_fc.biases, 
@@ -228,10 +228,13 @@ void CPUbackend::forward(const int boardsize,
     }
 }
 
-
 void CPUbackend::release() {
     if (m_weights != nullptr) {
         m_weights.reset();
     }
     m_weights = nullptr;
+}
+
+bool CPUbackend::valid() {
+    return m_weights->loaded;
 }

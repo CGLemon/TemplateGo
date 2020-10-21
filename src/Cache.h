@@ -13,19 +13,23 @@
 #include "Utils.h"
 
 struct NNResult {
-    NNResult() : winrate(0.0f), policy_pass(0.0f), final_score(0.0f) {
+    NNResult() {
         policy.fill(0.0f);
         ownership.fill(0.0f);
-        multi_labeled.fill(0.0f);
+        // multi_labeled.fill(0.0f);
     }
 
-    float winrate;
-    float policy_pass;
-    float final_score;
+    // float winrate{0.0f};
+    float policy_pass{0.0f};
+    float final_score{0.0f};
+
+    float alpha{0.0f};
+    float beta{0.0f};
+    float gamma{0.0f};
 
     std::array<float, NUM_INTERSECTIONS> policy;
     std::array<float, NUM_INTERSECTIONS> ownership;
-    std::array<float, 21> multi_labeled;
+    // std::array<float, 21> multi_labeled;
 };
 
 template <typename EvalResult>

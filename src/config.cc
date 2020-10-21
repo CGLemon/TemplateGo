@@ -2,16 +2,23 @@
 #include "Zobrist.h"
 #include "Utils.h"
 
+#include <stdexcept>
 #include <string>
 #include <mutex>
 
 std::unordered_map<std::string, Utils::Option> options_map;
 // std::mutex map_mutex;
 
-#define OPTIONS_EXPASSION(T)                        \
-template<>                                          \
-T option<T>(std::string name) {                     \
-    return options_map.find(name)->second.get<T>(); \
+#define OPTIONS_EXPASSION(T)                  \
+template<>                                    \
+T option<T>(std::string name) {               \
+    auto res = options_map.find(name);        \
+    if (res == std::end(options_map)) {       \
+        auto out = std::string{"Not Found "}; \
+         out += name;                         \
+        throw std::runtime_error(out);        \
+    }                                         \
+    return res->second.get<T>();              \
 }
 
 OPTIONS_EXPASSION(std::string)
@@ -41,6 +48,7 @@ OPTIONS_SET_EXPASSION(float)
 
 void init_options_map() {
 
+    // basic options
     options_map["name"] << Utils::Option::setoption(PROGRAM);
     options_map["version"] << Utils::Option::setoption(VERSION);
 
@@ -65,7 +73,7 @@ void init_options_map() {
     options_map["weights_file"] << Utils::Option::setoption(std::string{"_NO_FILE_"});
     options_map["softmax_temp"] << Utils::Option::setoption(1.0f);
     options_map["cache_moves"] << Utils::Option::setoption(25);
-    options_map["mutil_labeled_komi"] << Utils::Option::setoption(0, 10, -10);
+    // options_map["mutil_labeled_komi"] << Utils::Option::setoption(0, 10, -10);
     options_map["batchsize"] << Utils::Option::setoption(1, 32, 1);
     options_map["waittime"] << Utils::Option::setoption(10);
 
@@ -81,6 +89,7 @@ void init_options_map() {
     options_map["puct"] << Utils::Option::setoption(0.5f);
     options_map["score_utility_div"] << Utils::Option::setoption(3.5f);
     options_map["ponder"] << Utils::Option::setoption(false);
+    options_map["random_min_visits"] << Utils::Option::setoption(1);
 
     // time control paramters
     options_map["maintime"] << Utils::Option::setoption(3600);

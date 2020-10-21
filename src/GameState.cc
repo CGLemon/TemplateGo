@@ -168,7 +168,7 @@ void GameState::display(const size_t strip) const {
 std::string GameState::display_to_string(const size_t strip) const {
 
     auto out = std::ostringstream{};
-    out << " board" << std::endl;
+    out << std::endl;
     board.board_stream(out, board.get_last_move());
     board.info_stream(out);
     board.prisoners_stream(out);
