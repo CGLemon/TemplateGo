@@ -156,7 +156,7 @@ void forward(std::shared_ptr<Model::NNweights> m_weights,
                           m_weights->fs_fc.biases, 
                           output_fs, false);
 
-    // winrate
+    // winrate misc
     FullyConnect::Forward(OUTPUTS_VALUE, VALUE_MISC,
                           value_pool, 
                           m_weights->v_fc.weights,

@@ -111,8 +111,13 @@ Engine::Response Engine::reset_komi(const float komi) {
     return Response{};
 }
 
-Engine::Response Engine::input_features() {
-    return Model::features_to_string(*m_state);
+Engine::Response Engine::input_features(int symmetry) {
+    if (symmetry < 0) {
+        symmetry = 0;
+    } else if (symmetry >= 8) {
+        symmetry = 7;
+    }
+    return Model::features_to_string(*m_state, symmetry);
 }
 
 Engine::Response Engine::undo_move() {
@@ -166,5 +171,42 @@ Engine::Response Engine::clear_board() {
     auto bsize = m_state->get_boardsize();
     m_state->init_game(bsize, komi);
     return Response{};
+}
+
+Engine::Response Engine::misc_features() {
+    
+    auto out = std::ostringstream{};
+    const auto bsize = m_state->get_boardsize();
+
+    out << "Ladder Plane:" << std::endl;
+    out << " 0: None" << std::endl;
+    out << " 1: Ladder is death." << std::endl;
+    out << " 2: Ladder is escapable." << std::endl;
+    out << " 3: Atari move." << std::endl;
+    out << " 4: Take move." << std::endl;
+
+    auto ladders = m_state->board.get_ladders();
+
+    for (int y = 0; y < bsize; ++y) {
+        for (int x = 0; x < bsize; ++x) {
+            const auto idx = m_state->get_index(x, y);
+            const auto ladder = ladders[idx];
+            if (ladder == Board::ladder_t::LADDER_DEATH) {
+                out << std::setw(4) << 1;
+            } else if (ladder == Board::ladder_t::LADDER_ESCAPABLE) {
+                out << std::setw(4) << 2;
+            } else if (ladder == Board::ladder_t::LADDER_ATARI) {
+                out << std::setw(4) << 3;
+            } else if (ladder == Board::ladder_t::LADDER_TAKE) {
+                out << std::setw(4) << 4;
+            } else {
+                assert(ladder == Board::ladder_t::NOT_LADDER);
+                out << std::setw(4) << 0;
+            }
+        }
+        out << std::endl;
+    }
+    out << std::endl;
+    return out.str();
 }
 

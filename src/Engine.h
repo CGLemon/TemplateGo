@@ -33,7 +33,7 @@ public:
 
     Response reset_komi(const float komi);
 
-    Response input_features();
+    Response input_features(int symmetry);
 
     Response think(const int color = Board::INVAL);
 
@@ -44,6 +44,8 @@ public:
     Response set_playouts(const int p);
  
     Response clear_board();
+
+    Response misc_features();
 
 private:
     std::shared_ptr<Evaluation> m_evaluation{nullptr};

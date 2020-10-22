@@ -46,7 +46,14 @@ public:
         GOOD_FOR_HUNTER,
         GOOD_FOR_PREY,
         GOOD_FOR_NONE,
+        
+        LADDER_DEATH,
+        LADDER_ESCAPABLE,
+        LADDER_ATARI,
+        LADDER_TAKE,
+        NOT_LADDER
     };
+
 
     static constexpr size_t MAX_LADDER_NODES = 2000;
 
@@ -112,7 +119,7 @@ public:
     void board_stream(std::ostream &out, const int lastmove = NO_VERTEX) const;
     void board_stream(std::ostream &out, const int lastmov, bool is_sgf) const;
 
-    void text_display();
+    void text_display() const;
     void display_chain();
    /*
     * =====================================================================
@@ -206,23 +213,24 @@ public:
     */
     // Ladder helper
     bool is_neighbor(const int vtx_1, const int vtx_2) const;
-    bool would_be_ko_move(const int vtx, const int color) const;
     int find_liberties(const int vtx, std::vector<int>& buf) const;
     int find_liberty_gaining_captures(const int vtx, std::vector<int>& buf) const;
     std::pair<int, int> get_libs_for_ladder(const int vtx, const int color) const;
 
     ladder_t prey_selections(const int prey_color,
-                             const int parent, std::vector<int>& selection) const;
+                             const int ladder_vtx, std::vector<int>& selection, bool) const;
     ladder_t hunter_selections(const int prey_color,
-                               const int parent, std::vector<int>& selection) const;
+                               const int ladder_vtx, std::vector<int>& selection) const;
     // 計算被征子方能否逃脫
     ladder_t hunter_move(std::shared_ptr<Board> board,
-                         const int vtx, const int prey_color,
-                         const int parent, size_t& ladder_nodes, bool fork) const;
+                         const int prey_vtx, const int prey_color,
+                         const int ladder_vtx, size_t& ladder_nodes, bool fork) const;
     ladder_t prey_move(std::shared_ptr<Board> board,
-                       const int vtx, const int prey_color,
-                       const int parent, size_t& ladder_nodes, bool fork) const;
+                       const int hunter_vtx, const int prey_color,
+                       const int ladder_vtx, size_t& ladder_nodes, bool fork) const;
     bool is_ladder(const int vtx) const;
+
+    std::vector<ladder_t> get_ladders() const;
    /*
     * =====================================================================
     */

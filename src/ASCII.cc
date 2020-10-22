@@ -85,8 +85,12 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
             out << "syntax error : boardsize <integral>";
         }
     } else if (const auto res = parser.find("input-pattens", 0)) {
-        lambda_syntax_not_understood(parser, 1);
-        out << m_ascii_engine->input_features();
+        lambda_syntax_not_understood(parser, 2);
+        if (const auto in = parser.get_commands(1)) {
+            out << m_ascii_engine->input_features(std::stoi(in->str));
+        } else {
+            out << "syntax error : input-pattens <integral>";
+        }
     } else if (const auto res = parser.find("genmove", 0)) {
         lambda_syntax_not_understood(parser, 2);
         if (parser.get_count() >= 2) {
@@ -112,6 +116,9 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
             auto filename = parser.get_commands(1)->str;
             out << m_ascii_engine->dump_collect(filename);
         }
+    } else if (const auto res = parser.find("dump-misc-features", 0)) {
+        lambda_syntax_not_understood(parser, 1);
+        out << m_ascii_engine->misc_features();
     } else {
         out << "unknown command";
     }

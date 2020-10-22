@@ -211,11 +211,18 @@ void fill_ko_plane(const std::shared_ptr<Board> board,
     if (komove == Board::NO_VERTEX) {
         return;
     }
+    const auto intersections = board->get_intersections();
     const auto x = board->get_x(komove);
     const auto y = board->get_y(komove);
-    const auto idx = board->get_index(x, y);
-    const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
-    plane[sym_idx] = static_cast<float>(true);
+    const auto ko_idx = board->get_index(x, y);
+
+    for (int idx = 0; idx < intersections; ++idx) {
+        const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
+        if (ko_idx == sym_idx) {
+            plane[idx] = static_cast<float>(true);
+            break;
+        }
+    }
 }
 
 void fill_move_plane(const std::shared_ptr<Board> board,
@@ -226,11 +233,18 @@ void fill_move_plane(const std::shared_ptr<Board> board,
     if (last_move == Board::NO_VERTEX || last_move == Board::PASS || last_move == Board::RESIGN) {
         return;
     }
+    const auto intersections = board->get_intersections();
     const int x = board->get_x(last_move);
     const int y = board->get_y(last_move);
-    const int idx = board->get_index(x, y);
-    const int sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
-    plane[sym_idx] = static_cast<float>(true);
+    const int lastmove_idx = board->get_index(x, y);
+
+    for (int idx = 0; idx < intersections; ++idx) {
+        const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
+        if (lastmove_idx == sym_idx) {
+            plane[idx] = static_cast<float>(true);
+            break;
+        }
+    }
 }
 
 void fill_seki_plane(const std::shared_ptr<Board> board,
@@ -242,35 +256,82 @@ void fill_seki_plane(const std::shared_ptr<Board> board,
 
     for (int idx = 0; idx < intersections; ++idx) {
         const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
-        if (ownership[idx] == Board::EMPTY) {
-            plane[sym_idx] = static_cast<float>(true);
+        if (ownership[sym_idx] == Board::EMPTY) {
+            plane[idx] = static_cast<float>(true);
+        }
+    }
+}
+
+void fill_takemove_plane(const std::shared_ptr<Board> board,
+                         std::vector<float>::iterator plane,
+                         const int symmetry) {
+
+    const auto boardsize = board->get_boardsize();
+    const auto intersections = board->get_intersections();
+
+    for (int idx = 0; idx < intersections; ++idx) {
+        const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
+        const auto x = sym_idx % boardsize;
+        const auto y = sym_idx / boardsize;
+
+        const auto vtx = board->get_vertex(x, y);
+        const auto color = board->get_state(vtx);
+        const auto take = board->is_take_move(vtx, color) ||
+                              board->is_take_move(vtx, !color);
+
+        if (take) {
+            plane[idx] = static_cast<float>(true);
         }
     }
 }
 
 
+void fill_ladder_plane(const std::shared_ptr<Board> board,
+                       std::vector<float>::iterator plane,
+                       const int symmetry) {
+
+    const auto ladders = board->get_ladders();
+    const auto intersections = board->get_intersections();
+
+    for (int idx = 0; idx < intersections; ++idx) {
+        const auto sym_idx = Board::symmetry_nn_idx_table[symmetry][idx];
+        if (ladders[sym_idx] == Board::ladder_t::LADDER_DEATH) {
+            plane[idx + 0 * intersections] = static_cast<float>(true);
+        } 
+        else if (ladders[sym_idx] == Board::ladder_t::LADDER_ESCAPABLE) {
+            plane[idx + 1 * intersections] = static_cast<float>(true);
+        }
+        else if (ladders[sym_idx] == Board::ladder_t::LADDER_ATARI) {
+            plane[idx + 2 * intersections] = static_cast<float>(true);
+        }
+        else if (ladders[sym_idx] == Board::ladder_t::LADDER_TAKE) {
+            plane[idx + 3 * intersections] = static_cast<float>(true);
+        }
+    }
+}
+
 std::vector<float> Model::gather_planes(const GameState *const state, 
                                         const int symmetry) {
     static constexpr auto PAST_MOVES = 3;
     static constexpr auto INPUT_PAIRS = 6;
-
+    static constexpr auto LADDERS = 4;
    /*
     * 
-    * Plane  1: current player now stones on board.
-    * Plane  2: current player one past move stones on board.
-    * Plane  3: current player two past move stones on board.
+    * Plane  1: current player now stones on board
+    * Plane  2: current player one past move stones on board
+    * Plane  3: current player two past move stones on board
     *
-    * Plane  4: current player one liberty strings.
-    * Plane  5: current player two liberties strings.
-    * Plane  6: current player three liberties strings.
+    * Plane  4: current player one liberty strings
+    * Plane  5: current player two liberties strings
+    * Plane  6: current player three liberties strings
     *
-    * Plane  7: next player now stones on board.
-    * Plane  8: next player one past move stones on board.
-    * Plane  9: next player two past move stones on board.
+    * Plane  7: next player now stones on board
+    * Plane  8: next player one past move stones on board
+    * Plane  9: next player two past move stones on board
     *
-    * Plane 10: current player one liberty strings.
-    * Plane 11: current player two liberties strings.
-    * Plane 12: current player three liberties strings.
+    * Plane 10: current player one liberty strings
+    * Plane 11: current player two liberties strings
+    * Plane 12: current player three liberties strings
     *
     * Plane 13: ko move (one hot)
     *
@@ -279,12 +340,12 @@ std::vector<float> Model::gather_planes(const GameState *const state,
     * Plane 16: two past move (one hot)
     *
     * Plane 17: seki point
+    * Plane 18: take move
     *
-    * Plane 18: empty
-    * Plane 19: empty
-    * Plane 20: empty
-    * Plane 21: empty
-    * Plane 22: empty
+    * Plane 19: ladder features
+    * Plane 20: ladder features
+    * Plane 21: ladder features
+    * Plane 22: ladder features
     *
     * Plane 23: black or white
     * Plane 24: always one
@@ -323,13 +384,11 @@ std::vector<float> Model::gather_planes(const GameState *const state,
                              white_it + c * intersections,
                              c+1, symmetry);
     }
-    // iterate += 2 * INPUT_PAIRS * intersections;
     std::advance(iterate, 2 * INPUT_PAIRS * intersections);
 
     // plane 13
     fill_ko_plane(state->get_past_board(0),
                   iterate, symmetry);
-    // iterate += intersections;
     std::advance(iterate, intersections);
 
     // plane 14 to 16
@@ -338,31 +397,35 @@ std::vector<float> Model::gather_planes(const GameState *const state,
                         iterate + h * intersections,
                         symmetry);
     }
-    // iterate += PAST_MOVES * intersections;
     std::advance(iterate, PAST_MOVES * intersections);
 
     // plane 17
     fill_seki_plane(state->get_past_board(0),
                     iterate,
                     symmetry);
-    // iterate += intersections;
     std::advance(iterate,  intersections);
 
-    // plane 18 to 22
-    // Empty
-    // iterate += 5 * intersections;
-    std::advance(iterate, 5 * intersections);
+    // plane 18
+    fill_takemove_plane(state->get_past_board(0),
+                        iterate,
+                        symmetry);
+    std::advance(iterate,  intersections);
+
+
+    // plane 19 to 22
+    fill_ladder_plane(state->get_past_board(0),
+                      iterate,
+                      symmetry);
+    std::advance(iterate,  LADDERS * intersections);
 
     // plane 23
     if (blacks_move) {
         std::fill(iterate, iterate+intersections, static_cast<float>(true));
     }
-    // iterate += intersections;
     std::advance(iterate,  intersections);
 
     // plane 24
     std::fill(iterate, iterate+intersections, static_cast<float>(true));
-    // iterate += intersections;
     std::advance(iterate,  intersections);
 
     assert(iterate == std::end(input_data));
@@ -411,9 +474,9 @@ std::vector<float> Model::gather_features(const GameState *const state) {
     return input_data;
 }
 
-void Model::features_stream(std::ostream &out, const GameState *const state) {
+void Model::features_stream(std::ostream &out, const GameState *const state, const int symmetry) {
 
-    const auto planes = gather_planes(state, Board::IDENTITY_SYMMETRY);
+    const auto planes = gather_planes(state, symmetry);
     const auto features = gather_features(state);
     const auto boardsize = state->board.get_boardsize();
     const auto intersections = boardsize * boardsize;
@@ -439,10 +502,10 @@ void Model::features_stream(std::ostream &out, const GameState *const state) {
     }
 }
 
-std::string Model::features_to_string(GameState &state) {
+std::string Model::features_to_string(GameState &state, const int symmetry) {
 
     auto out = std::ostringstream{};
-    features_stream(out, &state);
+    features_stream(out, &state, symmetry);
 
     return out.str();
 }
@@ -478,7 +541,6 @@ NNResult Model::get_result(const GameState *const state,
 
     // Final score
     result.final_score = 20 * final_score[0];
-
 
     // Winrate misc
     result.alpha = values[0];
@@ -538,4 +600,3 @@ void Model::fill_convolution_layer(Desc::ConvLayer &layer, std::istream &weights
     auto weights = get_weights_from_file(weights_file);
     layer.load_weights(weights);
 }
-

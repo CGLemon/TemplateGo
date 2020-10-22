@@ -125,9 +125,11 @@ struct Model {
 
     static std::vector<float> gather_features(const GameState *const state);
 
-    static void features_stream(std::ostream &out, const GameState *const state);
+    static void features_stream(std::ostream &out,
+                                const GameState *const state,
+                                const int symmetry);
 
-    static std::string features_to_string(GameState &state);
+    static std::string features_to_string(GameState &state, const int symmetry);
 
     static NNResult get_result(const GameState *const state,
                                std::vector<float> &policy,

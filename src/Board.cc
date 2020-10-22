@@ -450,7 +450,7 @@ std::string Board::spcaces_to_string(const int times) const {
     return res;
 }
 
-void Board::text_display() {
+void Board::text_display() const {
 
     auto out = std::ostringstream{};
     board_stream(out, m_lastmove);
@@ -547,8 +547,7 @@ bool Board::is_take_move(const int vtx, const int color) const {
 
     for (int k = 0; k < 4; ++k) {
         const int avtx = vtx + m_dirs[k];
-        const int ip = m_string.parent[avtx];
-        const int libs = m_string.libs[ip];
+        const int libs = get_libs(avtx);
     
        if (m_state[avtx] == !color && libs == 1) {
            return true;
@@ -1215,7 +1214,7 @@ std::vector<int> Board::get_ownership() const {
             const auto idx = get_index(x, y);
             const auto vtx = get_vertex(x, y);
             if ((black[vtx] && white[vtx]) || (!black[vtx] && !white[vtx])) {
-                // If there are no stones on board, this is seki case.
+                //if there are no stones on board, this is seki case
                 res[idx] = EMPTY;
             } else if (black[vtx]) {
                 res[idx] = BLACK;  
@@ -1231,43 +1230,43 @@ std::vector<int> Board::get_ownership() const {
 
 int Board::get_groups(std::vector<int> &groups) const {
 
-  groups = std::vector<int>(m_numvertices, 0);
-  int cnt = 0;
-  auto ownership = get_ownership();
+    groups = std::vector<int>(m_numvertices, 0);
+    int cnt = 0;
+    auto ownership = get_ownership();
 
-  const auto peekState = [&] (int vtx) {
-    if (is_on_board(vtx)) {
-      const auto x = get_x(vtx);
-      const auto y = get_y(vtx);
-      const auto index = get_index(x, y);
-      return ownership[index];
-    }
-    return static_cast<int>(INVAL);
-  };
-
-  for (int y = 0; y < m_boardsize; ++y) {
-    for (int x = 0; x < m_boardsize; ++x) {
-      const auto vtx = get_vertex(x, y);
-      const auto color = m_state[vtx];
-      if (color != EMPTY && groups[vtx] == 0) {
-        cnt++;
-        auto group = std::vector<bool>(m_numvertices, false);
-
-        // 在同一快地裡就被視為同一個棋塊
-        const auto res = collect_group(vtx, color, group, peekState);
-
-        assert(res != 0);
-
-        for (int v = 0; v < m_numvertices; ++v) {
-          if (group[v]) {
-            groups[v] = cnt;
-          }
+    const auto peekState = [&] (int vtx) {
+        if (is_on_board(vtx)) {
+            const auto x = get_x(vtx);
+            const auto y = get_y(vtx);
+            const auto index = get_index(x, y);
+            return ownership[index];
         }
-      }
-    }
-  }
+        return static_cast<int>(INVAL);
+    };
 
-  return cnt;
+    for (int y = 0; y < m_boardsize; ++y) {
+        for (int x = 0; x < m_boardsize; ++x) {
+            const auto vtx = get_vertex(x, y);
+            const auto color = m_state[vtx];
+            if (color != EMPTY && groups[vtx] == 0) {
+                cnt++;
+                auto group = std::vector<bool>(m_numvertices, false);
+
+                // 在同一快地裡就被視為同一個棋塊
+                const auto res = collect_group(vtx, color, group, peekState);
+
+                assert(res != 0);
+
+                for (int v = 0; v < m_numvertices; ++v) {
+                    if (group[v]) {
+                        groups[v] = cnt;
+                    }
+                }
+            }
+        }
+    }
+
+    return cnt;
 }
 
 int Board::get_alive_groups(std::vector<int> &alive_groups) const {
@@ -1430,13 +1429,14 @@ void Board::sgf_stream(std::ostream &out) const {
     sgf_stream(out, m_lastmove, !(m_tomove));
 }
 
+// Find the liberties of string.
 int Board::find_liberties(const int vtx,
                           std::vector<int>& buf) const {
     auto num_found = size_t{0};
     auto next = vtx;
     do {
         for(int k = 0; k < 4; ++k) {
-            const int avtx = next + m_dirs[k];
+            const auto avtx = next + m_dirs[k];
             if(m_state[avtx] == EMPTY) {
                 auto begin = std::begin(buf);
                 auto end = std::end(buf);
@@ -1455,350 +1455,405 @@ int Board::find_liberties(const int vtx,
 
 int Board::find_liberty_gaining_captures(const int vtx,
                                          std::vector<int>& buf) const {
-  const int color = m_state[vtx];
-  const int opp = !(color);
+    const int color = m_state[vtx];
+    const int opp = !(color);
 
-  assert(color == BLACK || color == WHITE);
+    assert(color == BLACK || color == WHITE);
 
-  int chainHeadsChecked[NUM_INTERSECTIONS];
-  int numChainHeadsChecked = 0;
+    auto strings_buf = std::vector<int>{};
+    int num_found = 0;
+    int next = vtx;
 
-  int numFound = 0;
-  int next = vtx;
-  do
-  {
-    for(int k = 0; k < 4; ++k) {
-      const int avtx = next + m_dirs[k];
-      if(m_state[avtx] == opp) {
-        const int ip = m_string.parent[avtx];
-        if(m_string.libs[ip] == 1) {
-          bool alreadyChecked = false;
-          for(int i = 0; i < numChainHeadsChecked; ++i) {
-            if(chainHeadsChecked[i] == avtx) {
-              alreadyChecked = true;
-              break;
+    do {
+        for(int k = 0; k < 4; ++k) {
+            const int avtx = next + m_dirs[k];
+            if(m_state[avtx] == opp) {
+                const int aip = m_string.parent[avtx];
+                if(m_string.libs[aip] == 1) {
+                    auto begin = std::begin(strings_buf);
+                    auto end = std::end(strings_buf);
+                    auto res = std::find(begin, end, avtx);
+                    if (res == end) {
+                        num_found += find_liberties(avtx, buf);
+                    } else {
+                        strings_buf.emplace_back(avtx);
+                    }
+                }
             }
-          }
-          if(!alreadyChecked) {
-            numFound += find_liberties(avtx, buf);
-            chainHeadsChecked[numChainHeadsChecked++] = avtx;
-          }
         }
-      }
-    }
+        next = m_string.next[next];
+    } while (next != vtx);
 
-    next = m_string.next[next];
-  } while (next != vtx);
-
-  return numFound;
+    return num_found;
 }
 
 
 // Get the possible lowest and most liberties. 
 std::pair<int, int> Board::get_libs_for_ladder(const int vtx, const int color) const {
 
-  const int stone_libs = count_pliberties(vtx);
-  const int opp = (!color);
+    const int stone_libs = count_pliberties(vtx);
+    const int opp = (!color);
 
-  int num_caps = 0; //number of adjacent directions in which we will capture
-  int potential_libs_from_Caps = 0; //Total number of stones we're capturing (possibly with multiplicity)
-  int num_connection_libs = 0; //Sum over friendly groups connected to of their libs-1
-  int max_connection_libs = 0; //Max over friendly groups connected to of their libs-1
+    int num_caps = 0; //number of adjacent directions in which we will capture
+    int potential_libs_from_Caps = 0; //Total number of stones we're capturing (possibly with multiplicity)
+    int num_connection_libs = 0; //Sum over friendly groups connected to of their libs-1
+    int max_connection_libs = stone_libs; //Max over friendly groups connected to of their libs-1
   
-  for (int k = 0; k < 4; ++k) {
-    const int avtx = vtx + m_dirs[k];
-    const int acolor = m_state[avtx];
+    for (int k = 0; k < 4; ++k) {
+        const auto avtx = vtx + m_dirs[k];
+        const auto acolor = m_state[avtx];
 
-    if (acolor == color) {
-      const int aparent = m_string.parent[avtx];
-      const int alibs = m_string.libs[aparent] - 1;
-      num_connection_libs += alibs;
+        if (acolor == color) {
+            const int aparent = m_string.parent[avtx];
+            const int alibs = m_string.libs[aparent] - 1;
+            num_connection_libs += alibs;
 
-      if(alibs > max_connection_libs) {
-        max_connection_libs = alibs; 
-      }
-    } else if (acolor == opp) {
-      const int aparent = m_string.parent[avtx];
-      const int alibs = m_string.libs[aparent];
-      if (alibs == 1) {
-        num_caps++;
-        potential_libs_from_Caps += m_string.stones[aparent];
-      }
+            if(alibs > max_connection_libs) {
+                max_connection_libs = alibs; 
+            }
+        } else if (acolor == opp) {
+            const int aparent = m_string.parent[avtx];
+            const int alibs = m_string.libs[aparent];
+            if (alibs == 1) {
+                num_caps++;
+                potential_libs_from_Caps += m_string.stones[aparent];
+            }
+        }
     }
-  }
-  const int lower_bound =
-      num_caps + (max_connection_libs > stone_libs ? max_connection_libs : stone_libs); 
-  const int upper_bound = 
-      stone_libs + potential_libs_from_Caps + num_connection_libs;
+    const int lower_bound =
+        num_caps + max_connection_libs; 
+    const int upper_bound = 
+        stone_libs + potential_libs_from_Caps + num_connection_libs;
 
-  return {lower_bound, upper_bound};
+    return std::pair<int, int>{lower_bound, upper_bound};
 }
 
 Board::ladder_t Board::prey_selections(const int prey_color,
-                                       const int parent, std::vector<int>& selection) const {
-  assert(selection.empty());
+                                       const int ladder_vtx,
+                                       std::vector<int>& selections, bool think_ko) const {
+    assert(selections.empty());
 
-  const int libs = m_string.libs[parent];
-  if (libs >= 2 || m_komove != NO_VERTEX) {
-    // If we are the prey and the hunter left a simple ko point, assume we already win
-    // because we don't want to say yes on ladders that depend on kos
-    // This should also hopefully prevent any possible infinite loops - I don't know of any infinite loop
-    // that would come up in a continuous atari sequence that doesn't ever leave a simple ko point.
+    const int libs = get_libs(ladder_vtx);
+    if (libs >= 2 || (m_komove != NO_VERTEX && think_ko)) {
+        // If we are the prey and the hunter left a simple ko point, assume we already win
+        // because we don't want to say yes on ladders that depend on kos
+        // This should also hopefully prevent any possible infinite loops - I don't know of any infinite loop
+        // that would come up in a continuous atari sequence that doesn't ever leave a simple ko point.
 
-    return ladder_t::GOOD_FOR_PREY;
-  }
-  assert(libs == 1);
-
-  int num_move = find_liberties(parent, selection);
-  assert(num_move == libs);
-  const int move = selection[0];
-
-  num_move += find_liberty_gaining_captures(parent, selection);
-
-  selection.erase(
-    std::remove_if(std::begin(selection), std::end(selection), [=](int v){ return is_legal(v, prey_color); }),
-    std::end(selection)
-  );
-
-
-  num_move = selection.size();
-  if (num_move == 0) {
-    return ladder_t::GOOD_FOR_HUNTER; 
-  }
-
-  if (selection[0] == move) {
-    auto bound = get_libs_for_ladder(move, prey_color);
-    const int lower_bound = bound.first;
-    const int upper_bound = bound.second;
-    if (lower_bound >= 3) {
-      return ladder_t::GOOD_FOR_PREY;
+        return ladder_t::GOOD_FOR_PREY;
     }
-    if (num_move == 1  && upper_bound == 1) {
-      return ladder_t::GOOD_FOR_HUNTER;
-    }
-  }
+    assert(libs == 1);
 
-  return ladder_t::GOOD_FOR_NONE; // keep running
+    int num_move = find_liberties(ladder_vtx, selections);
+    assert(num_move == libs);
+    const int move = selections[0];
+
+    num_move += find_liberty_gaining_captures(ladder_vtx, selections);
+
+    // Must be a legal move.
+    selections.erase(
+        std::remove_if(std::begin(selections), std::end(selections), [=](int v){ return !is_legal(v, prey_color); }),
+        std::end(selections)
+    );
+
+    // If there is no legal move, the ladder string must die.
+    num_move = selections.size();
+    if (num_move == 0) {
+        return ladder_t::GOOD_FOR_HUNTER; 
+    }
+
+    if (selections[0] == move) {
+        auto bound = get_libs_for_ladder(move, prey_color);
+        const auto lower_bound = bound.first;
+        const auto upper_bound = bound.second;
+        if (lower_bound >= 3) {
+            return ladder_t::GOOD_FOR_PREY;
+        }
+        if (num_move == 1  && upper_bound == 1) {
+            return ladder_t::GOOD_FOR_HUNTER;
+        }
+    }
+
+    return ladder_t::GOOD_FOR_NONE; // keep running
 }
 
 bool Board::is_neighbor(const int vtx_1, const int vtx_2) const {
-  for (int k = 0; k < 4; ++k) {
-    const int avtx = vtx_1 + m_dirs[k];
-    if (avtx == vtx_2) {
-      return true;
+    for (int k = 0; k < 4; ++k) {
+        if ((vtx_1 + m_dirs[k]) == vtx_2) {
+             return true;
+        }
     }
-  }
-  return false;
+    return false;
 }
 
 Board::ladder_t Board::hunter_selections(const int prey_color,
-                                         const int parent, std::vector<int>& selection) const {
-  assert(selection.empty());
+                                         const int ladder_vtx, std::vector<int>& selections) const {
+    assert(selections.empty());
 
-  const int libs = m_string.libs[parent];
-  if (libs >= 3) {
-    // Prey is winner in this search!
-    return ladder_t::GOOD_FOR_PREY;
-  }
-  else if (libs <= 1) {
-    // Hunter is winner in this search!
-    return ladder_t::GOOD_FOR_HUNTER;
-  }
-  
-  assert(libs == 2);
-  
+    const int libs = get_libs(ladder_vtx);
 
-  auto buf = std::vector<int>{};
-  int num_libs = find_liberties(parent, buf);
-
-  assert(num_libs == libs);
-  const int move_1 = buf[0];
-  const int move_2 = buf[1];
-  //TODO: avoid double-ko death (from kata go)
-
-  if (!is_neighbor(move_1, move_2)) {
-    size_t size = 0;
-    const int hunter_color = (!prey_color);
-    if (move_1 >= 3 && move_2 >= 3) {
-      // Prey is winner in this search!
-      return ladder_t::GOOD_FOR_PREY;
+    if (libs >= 3) {
+        return ladder_t::GOOD_FOR_PREY;
     }
-    else if (move_1 >= 3) {
-      if (is_legal(move_2, hunter_color)) {
-        selection.emplace_back(move_2);
-        size++;
-      }
+    else if (libs <= 1) {
+        return ladder_t::GOOD_FOR_HUNTER;
     }
-    else if (move_2 >= 3) {
-      if (is_legal(move_1, hunter_color)) {
-        selection.emplace_back(move_1);
-        size++;
-      }
-    } else {
-      if (is_legal(move_1, hunter_color)) {
-        selection.emplace_back(move_1);
-        size++;
-      }
-      if (is_legal(move_2, hunter_color)) {
-        selection.emplace_back(move_2);
-        size++;
-      }
-    }
-  }
   
+    assert(libs == 2);
 
-  return ladder_t::GOOD_FOR_NONE; // keep running
+    auto buf = std::vector<int>{};
+    int num_libs = find_liberties(ladder_vtx, buf);
+
+    assert(num_libs == libs);
+    const int move_1 = buf[0];
+    const int move_2 = buf[1];
+    //TODO: avoid double-ko death (kata go)
+
+    if (!is_neighbor(move_1, move_2)) {
+        size_t size = 0;
+        const int hunter_color = (!prey_color);
+        const int libs_1 = count_pliberties(move_1); 
+        const int libs_2 = count_pliberties(move_2); 
+
+        if (libs_1 >= 3 && libs_2 >= 3) {
+            return ladder_t::GOOD_FOR_PREY;
+        }
+        else if (libs_1 >= 3) {
+            if (is_legal(move_1, hunter_color)) {
+                selections.emplace_back(move_1);
+                size++;
+            }
+        }
+        else if (libs_2 >= 3) {
+            if (is_legal(move_2, hunter_color)) {
+                selections.emplace_back(move_2);
+                size++;
+            }
+        } else {
+            if (is_legal(move_1, hunter_color)) {
+                selections.emplace_back(move_1);
+                size++;
+            }
+            if (is_legal(move_2, hunter_color)) {
+                selections.emplace_back(move_2);
+                size++;
+            }
+        }
+    }
+
+    if (selections.size() == 0) {
+        return ladder_t::GOOD_FOR_PREY;
+    }
+
+    return ladder_t::GOOD_FOR_NONE; // keep running
 }
 
 Board::ladder_t Board::hunter_move(std::shared_ptr<Board> board,
-                                   const int vtx, const int prey_color,
-                                   const int parent, size_t& ladder_nodes, bool fork) const {
-
-  if ((++ladder_nodes) >= MAX_LADDER_NODES) {
-    // If hit the limit, assume prey is winner. 
-    return ladder_t::GOOD_FOR_PREY;
-  }
-
-  std::shared_ptr<Board> ladder_board;
-  if (fork) {
-    ladder_board = std::make_shared<Board>(*board);
-  } else {
-    ladder_board = board;
-  }
-
-  if (vtx != NO_VERTEX) {
-    const int color =ladder_board->get_to_move();
-    assert(color == (!prey_color));
-    ladder_board->play_move(vtx, color);
-    ladder_board->exchange_to_move();
-  }
-
-  auto selections = std::vector<int>{};
-  auto res = ladder_board->hunter_selections(prey_color, parent, selections);
-
-  if (res != ladder_t::GOOD_FOR_NONE) {
-    return res;
-  }
-  
-  bool next_fork = true;
-  const size_t selection_size = selections.size();
-  if (selection_size == 1) {
-    next_fork = false;
-  }
-
-  auto best = ladder_t::GOOD_FOR_NONE;
- 
-  for (auto i = size_t{0}; i < selection_size; ++i) {
-    const int vtx = selections[i];
-    auto next_res = prey_move(ladder_board, vtx, 
-                              prey_color, parent, 
-                              ladder_nodes, next_fork);
-
-    assert(next_res != ladder_t::GOOD_FOR_NONE);
-
-    best = next_res;
-    if (next_res == ladder_t::GOOD_FOR_HUNTER) {
-      break;
+                                   const int prey_vtx, const int prey_color,
+                                   const int ladder_vtx, size_t& ladder_nodes, bool fork) const {
+    if ((++ladder_nodes) >= MAX_LADDER_NODES) {
+        // If hit the limit, assume prey is winner. 
+        return ladder_t::GOOD_FOR_PREY;
     }
-  }
 
-  return best;
+    std::shared_ptr<Board> ladder_board;
+    if (fork) {
+        ladder_board = std::make_shared<Board>(*board);
+    } else {
+        ladder_board = board;
+    }
+
+    if (prey_vtx != NO_VERTEX) {
+        // Prey move first.
+        ladder_board->play_move(prey_vtx, prey_color);
+    }
+    ladder_board->set_to_move(!prey_color);
+
+    // Search possible move(s) for hunter.
+    auto selections = std::vector<int>{};
+    auto res = ladder_board->hunter_selections(prey_color, ladder_vtx, selections);
+
+    if (res != ladder_t::GOOD_FOR_NONE) {
+        return res;
+    }
+  
+    bool next_fork = true;
+    const auto selection_size = selections.size();
+    if (selection_size == 1) {
+        next_fork = false;
+    }
+
+    auto best = ladder_t::GOOD_FOR_NONE;
+ 
+    for (auto i = size_t{0}; i < selection_size; ++i) {
+        const int vtx = selections[i];
+        auto next_res = prey_move(ladder_board, vtx, 
+                                  prey_color, ladder_vtx, 
+                                  ladder_nodes, next_fork);
+
+        assert(next_res != ladder_t::GOOD_FOR_NONE);
+
+        best = next_res;
+        if (next_res == ladder_t::GOOD_FOR_HUNTER) {
+            break;
+        }
+    }
+
+    return best;
 }
 
 Board::ladder_t Board::prey_move(std::shared_ptr<Board> board,
-                                 const int vtx, const int prey_color,
-                                 const int parent, size_t& ladder_nodes, bool fork) const {
-  if ((++ladder_nodes) >= MAX_LADDER_NODES) {
-    // If hit the limit, assume prey is winner. 
-    return ladder_t::GOOD_FOR_PREY;
-  }
+                                 const int hunter_vtx, const int prey_color,
+                                 const int ladder_vtx, size_t& ladder_nodes, bool fork) const {
 
-  std::shared_ptr<Board> ladder_board;
-  if (fork) {
-    ladder_board = std::make_shared<Board>(*board);
-  } else {
-    ladder_board = board;
-  }
-
-  if (vtx != NO_VERTEX) {
-   const int color =ladder_board->get_to_move();
-    assert(color == prey_color);
-    ladder_board->play_move(vtx, color);
-    ladder_board->play_move(vtx);
-    ladder_board->exchange_to_move();
-  }
-
-  auto selections = std::vector<int>{};
-  auto res = ladder_board->prey_selections(prey_color, parent, selections);
-
-  if (res != ladder_t::GOOD_FOR_NONE) {
-    return res;
-  }
-  bool next_fork = true;
-  const size_t selection_size = selections.size();
-  if (selection_size == 1) {
-    next_fork = false;
-  }
-
-  auto best = ladder_t::GOOD_FOR_NONE;
-
-  for (auto i = size_t{0}; i < selection_size; ++i) {
-    const int vtx = selections[i];
-    auto next_res = hunter_move(ladder_board, vtx,
-                                prey_color, parent,
-                                ladder_nodes, next_fork);
-
-    assert(next_res != ladder_t::GOOD_FOR_NONE);
-
-    best = next_res;
-    if (next_res == ladder_t::GOOD_FOR_PREY) {
-      break;
+    if ((++ladder_nodes) >= MAX_LADDER_NODES) {
+        // If hit the limit, assume prey is winner. 
+        return ladder_t::GOOD_FOR_PREY;
     }
-  }
 
-  return best;
+    std::shared_ptr<Board> ladder_board;
+    if (fork) {
+        ladder_board = std::make_shared<Board>(*board);
+    } else {
+        ladder_board = board;
+    }
+
+    if (hunter_vtx != NO_VERTEX) {
+        // Hunter move first.
+        ladder_board->play_move(hunter_vtx, !prey_color);
+    }
+    ladder_board->set_to_move(prey_color);
+
+    // Search possible move(s) for prey.
+    auto selections = std::vector<int>{};
+    auto res = ladder_board->prey_selections(prey_color, ladder_vtx, selections, hunter_vtx != NO_VERTEX);
+
+    if (res != ladder_t::GOOD_FOR_NONE) {
+        return res;
+    }
+
+    bool next_fork = true;
+    const size_t selection_size = selections.size();
+    if (selection_size == 1) {
+        next_fork = false;
+    }
+
+    auto best = ladder_t::GOOD_FOR_NONE;
+
+    for (auto i = size_t{0}; i < selection_size; ++i) {
+        const int vtx = selections[i];
+        auto next_res = hunter_move(ladder_board, vtx,
+                                    prey_color, ladder_vtx,
+                                    ladder_nodes, next_fork);
+
+        assert(next_res != ladder_t::GOOD_FOR_NONE);
+
+        best = next_res;
+        if (next_res == ladder_t::GOOD_FOR_PREY) {
+            break;
+        }
+    }
+
+    return best;
 }
 
 bool Board::is_ladder(const int vtx) const {
 
-  if (vtx == PASS) {
-    return false;
-  }
+    if (vtx == PASS) {
+        return false;
+    }
 
-  const int prey_color = m_state[vtx];
-  const int hunter_color = !(prey_color);
+    const int prey_color = m_state[vtx];
+    if (prey_color == EMPTY || prey_color == INVAL) {
+        return false;
+    }
+    // const int hunter_color = !prey_color;
 
-  if (prey_color != BLACK && prey_color != WHITE) {
-    return false;
-  }
+    const int libs = get_libs(vtx);
+    const int ladder_vtx = vtx; 
+    size_t search_nodes = 0;
+    auto res = ladder_t::GOOD_FOR_NONE;
+    if (libs == 1) {
+        auto ladder_board = std::make_shared<Board>(*this);
+        res = prey_move(ladder_board,
+                        NO_VERTEX, prey_color,
+                        ladder_vtx, search_nodes, false);
+    } else if (libs == 2) {
+        auto ladder_board = std::make_shared<Board>(*this);
+        res = hunter_move(ladder_board,
+                          NO_VERTEX, prey_color,
+                          ladder_vtx, search_nodes, false);
+
+    } else if (libs >= 3) {
+        res = ladder_t::GOOD_FOR_PREY;
+    }
+
+    assert(res != ladder_t::GOOD_FOR_NONE);
+    return res == ladder_t::GOOD_FOR_HUNTER;
+}
+
+std::vector<Board::ladder_t> Board::get_ladders() const {
+
+    auto res = std::vector<Board::ladder_t>(m_intersections, ladder_t::NOT_LADDER);
+    auto checked = std::vector<int>{};
+
+    for (int y = 0; y < m_boardsize; ++y) {
+        for (int x = 0; x < m_boardsize; ++x) {
+            const auto idx = get_index(x, y);
+            const auto vtx = get_vertex(x, y);
+
+            int libs = 0;
+
+            auto begin = std::begin(checked);
+            auto end = std::end(checked);
+            auto parent = m_string.parent[vtx];
+            auto found = std::find(begin, end, parent);
+            if (found != end) {
+                // Found!
+                libs = get_libs(vtx);
+
+            } else {
+                // Not found!
+                const auto ladder = is_ladder(vtx);
+                if (ladder) {
+                    checked.emplace_back(parent);
+                    libs = get_libs(vtx);
+                }
+            }
+
+            if (libs == 0) {
+                continue;
+            }
+
+            assert(libs == 1 || libs == 2);
+            if (libs == 1) {
+                // The ladder string is already death.
+                res[idx] = ladder_t::LADDER_DEATH;
+            } else {
+                // The ladder string has a chance to escape.
+                res[idx] = ladder_t::LADDER_ESCAPABLE;
+            }
+
+            if (found == end) {
+                auto buf = std::vector<int>{};
+                auto num_move = find_liberties(vtx, buf);
+                assert(num_move == libs);
+
+                for (const auto &v : buf) {
+                    const auto ax = get_x(v);
+                    const auto ay = get_y(v);
+                    const auto aidx = get_index(ax, ay); 
+                    if (libs == 1) {
+                        res[aidx] = ladder_t::LADDER_TAKE;
+                    } else {
+                        res[aidx] = ladder_t::LADDER_ATARI;
+                    }
+                }
+            }
+        }
+    }
 
 
-  const int libs = get_libs(vtx);
-  const int ladder_parent = m_string.parent[vtx]; 
-  
-  bool hunter_select;
-
-  size_t ladder_nodes = 0;
-  auto res = ladder_t::GOOD_FOR_NONE;
-
-  if (libs == 2) {
-    auto ladder_board = std::make_shared<Board>(*this);
-    res = hunter_move(ladder_board,
-                      NO_VERTEX, prey_color,
-                      ladder_parent, ladder_nodes, false);
-
-  } else if (libs == 1) {
-    auto ladder_board = std::make_shared<Board>(*this);
-    res = prey_move(ladder_board,
-                    NO_VERTEX, prey_color,
-                    ladder_parent, ladder_nodes, false);
-  }
-
-  if (res == ladder_t::GOOD_FOR_NONE || res == ladder_t::GOOD_FOR_PREY) {
-    return false;
-  }
-  assert(res == ladder_t::GOOD_FOR_HUNTER);
-
-  return true;
+    return res;
 }
 

@@ -147,14 +147,14 @@ void CUDAbackend::worker() {
     while (true) {
         if (!m_thread_running) return;
 
-        auto gether_entry = gether_batches();
-        const auto batch_size = gether_entry.size();
+        auto gather_entry = gether_batches();
+        const auto batch_size = gather_entry.size();
 
         if (batch_size == 0) {
             continue;
         }
 
-        const auto first = *std::begin(gether_entry);
+        const auto first = *std::begin(gather_entry);
         const auto boardsize = first->boardsize;
 
         const auto in_p_size = first->in_p.size();
@@ -175,7 +175,7 @@ void CUDAbackend::worker() {
         auto batch_out_val = std::vector<float>(batch_size * out_val_size);
 
         auto index = size_t{0};
-        for (auto &x : gether_entry) {
+        for (auto &x : gather_entry) {
             std::copy(std::begin(x->in_p),
                       std::end(x->in_p),
                       std::begin(batch_input_planes) + index * in_p_size);
@@ -196,7 +196,7 @@ void CUDAbackend::worker() {
                       batch_out_val);
 
         index = 0;
-        for (auto &x : gether_entry) {
+        for (auto &x : gather_entry) {
             std::copy(std::begin(batch_out_pol) + index * out_pol_size,
                       std::begin(batch_out_pol) + (index+1) * out_pol_size,
                       std::begin(x->out_pol));
@@ -320,7 +320,7 @@ void CUDAbackend::batch_forward(const int batch_size,
         fs_fc.Forward(batch, cuda_val_op[1], cuda_output_fs, &handel); // final score
 
     m_graph->
-        winrate_fc.Forward(batch, cuda_val_op[1], cuda_output_val, &handel); // winrate
+        winrate_fc.Forward(batch, cuda_val_op[1], cuda_output_val, &handel); // winrate misc
 
 
     auto temp_prob = std::vector<float>(batch * intersections);
