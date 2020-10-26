@@ -3,6 +3,7 @@
 
 #include "config.h"
 #include "GameState.h"
+#include "SGFStream.h"
 #include "Evaluation.h"
 #include "Trainer.h"
 #include "Search.h"
@@ -41,11 +42,17 @@ public:
 
     Response dump_collect(std::string file = "std-output");
 
+    Response dump_sgf(std::string file = "std-output");
+
     Response set_playouts(const int p);
  
     Response clear_board();
 
     Response misc_features();
+
+    Response nn_batchmark(const int times);
+
+    Response clear_cache();
 
 private:
     std::shared_ptr<Evaluation> m_evaluation{nullptr};

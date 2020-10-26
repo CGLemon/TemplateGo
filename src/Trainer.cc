@@ -221,7 +221,11 @@ void Trainer::scatch_step(GameState &state, Step &step) const {
 
     // current komi.
     const auto komi = state.get_komi();
-    step.current_komi = (step.to_move == Board::BLACK ? komi : -komi);
+    if (komi == 0.0f) {
+        step.current_komi = 0.0f;
+    } else {
+        step.current_komi = (step.to_move == Board::BLACK ? komi : -komi);
+    }
 }
 
 

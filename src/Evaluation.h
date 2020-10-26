@@ -27,6 +27,8 @@ public:
 
     void set_playouts(const int p);
 
+    float nn_benchmark(GameState &state, const int times);
+
 private:
     Network m_network;
 

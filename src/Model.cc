@@ -49,7 +49,7 @@ void Model::loader(const std::string &filename,
 
     if (!file.is_open()) {
         file.close();
-        printf("Could not opne file : %s\n", filename.c_str());
+        auto_printf("Could not opne file : %s\n", filename.c_str());
         return;
     }
 

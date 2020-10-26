@@ -116,9 +116,24 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
             auto filename = parser.get_commands(1)->str;
             out << m_ascii_engine->dump_collect(filename);
         }
+    } else if (const auto res = parser.find("dump-sgf", 0)) {
+        lambda_syntax_not_understood(parser, 2);
+        if (parser.get_count() == 1) {
+            out << m_ascii_engine->dump_sgf();
+        } else {
+            auto filename = parser.get_commands(1)->str;
+            out << m_ascii_engine->dump_sgf(filename);
+        }
     } else if (const auto res = parser.find("dump-misc-features", 0)) {
         lambda_syntax_not_understood(parser, 1);
         out << m_ascii_engine->misc_features();
+    } else if (const auto res = parser.find("nn-benchmark", 0)) {
+        lambda_syntax_not_understood(parser, 2);
+        if (const auto in = parser.get_commands(1)) {
+            out << m_ascii_engine->nn_batchmark(std::stoi(in->str));
+        } else {
+            out << "syntax error : nn-benchmark <integral>";
+        }
     } else {
         out << "unknown command";
     }

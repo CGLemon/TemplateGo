@@ -2,7 +2,7 @@
 #include "Board.h"
 #include "GameState.h"
 #include "Network.h"
-#include "Random.h"
+#include "Utils.h"
 
 #include <cassert>
 #include <cstdint>
@@ -33,4 +33,16 @@ void Evaluation::release_nn() {
 
 void Evaluation::set_playouts(const int p) {
     m_network.set_playouts(p);
+}
+
+float Evaluation::nn_benchmark(GameState &state, const int times) {
+
+   auto timer = Utils::Timer();
+
+   timer.clock();
+   for (int t = 0; t < times; ++t) {
+       m_network.get_output(&state, Network::RANDOM_SYMMETRY, -1, false, false);
+   }
+   const auto seconds = timer.get_duration();
+   return seconds;
 }

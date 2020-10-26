@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <atomic>
 
 class SelfPlay {
 public:
@@ -18,7 +19,13 @@ private:
     void loop();
     void execute(Utils::CommandParser &parser);
 
+    void start_selfplay();
+
     Engine *m_selfplay_engine{nullptr};
+
+    std::atomic<int> m_max_selfplay_games{1};
+    std::string sgf_filename{"out.sgf"};
+    std::string data_filename{"out.txt"};
 
 };
 

@@ -126,8 +126,22 @@ ArgsParser::ArgsParser(int argc, char** argv) {
 
     using List = std::vector<std::string>;
 
-    if (const auto help = parser.find(List{"--help", "-h"})) {
+    if (const auto res = parser.find(List{"--help", "-h"})) {
         set_option("help", true);
+    }
+
+    if (const auto res = parser.find("--noise")) {
+        set_option("dirichlet_noise", true);
+    }
+
+    if (const auto res = parser.find("--random")) {
+        set_option("random_move", true);
+    }
+
+    if (const auto res = parser.find_next("--random_div")) {
+        if (is_parameter(res->str)) {
+            set_option("random_move_div", res->get<int>());
+        }
     }
 
     if (const auto res = parser.find_next(List{"--weights", "-w"})) {
@@ -168,7 +182,7 @@ ArgsParser::ArgsParser(int argc, char** argv) {
 
     if (const auto res = parser.find_next(List{"--mode", "-m"})) {
         if (is_parameter(res->str)) {
-            if (res->str == "ascii" || res->str == "gtp") {
+            if (res->str == "ascii" || res->str == "gtp" || res->str == "selfplay") {
                 set_option("mode", res->str);
             } else {
                 Utils::auto_printf("syntax not understood : %s\n", res->get<const char*>());
@@ -187,6 +201,11 @@ ArgsParser::ArgsParser(int argc, char** argv) {
     }
 
     if (option<std::string>("mode") == "gtp") {
+        set_option("quiet", true);
+    }
+
+    if (option<std::string>("mode") == "selfplay") {
+        set_option("collect", true);
         set_option("quiet", true);
     }
 }

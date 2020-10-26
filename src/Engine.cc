@@ -144,7 +144,7 @@ Engine::Response Engine::self_play() {
 
         auto res = m_state->vertex_to_string(move);
         auto_printf("move = %s\n", res.c_str());
-        m_state->display(2);
+        auto_printf("%s", showboard(2).c_str());
     }
     m_trainer->gather_winner(*m_state);
     return m_state->result_to_string();
@@ -157,6 +157,16 @@ Engine::Response Engine::dump_collect(std::string file) {
     } else {
         m_trainer->save_data(file, true);
         m_trainer->clear_game_steps();
+    }
+    return out.str();
+}
+
+Engine::Response Engine::dump_sgf(std::string file) {
+    auto out = std::ostringstream{};
+    if (file == "std-output") {
+        SGFStream::sgf_stream(out, *m_state);
+    } else {
+        SGFStream::save_sgf(file, *m_state, true);
     }
     return out.str();
 }
@@ -206,7 +216,22 @@ Engine::Response Engine::misc_features() {
         }
         out << std::endl;
     }
-    out << std::endl;
     return out.str();
+}
+
+Engine::Response Engine::nn_batchmark(const int times) {
+
+    auto out = std::ostringstream{};
+    const auto seconds = m_evaluation->nn_benchmark(*m_state, times);
+
+    out << "Run times : " << times << std::endl;
+    out << "Total : " << seconds << " second(s)" << " | ";
+    out << "Avg : " << seconds / (float)times << " second(s)/time";
+    return out.str();
+}
+
+Engine::Response Engine::clear_cache() {
+    m_evaluation->clear_cache();
+    return Response{};
 }
 

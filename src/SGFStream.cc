@@ -6,7 +6,7 @@
 #include <fstream>
 #include <iomanip>
 
-void SGFstream::save_sgf(std::string filename, GameState &state, bool append) {
+void SGFStream::save_sgf(std::string filename, GameState &state, bool append) {
 
     std::ostringstream out;
     sgf_stream(out, state);
@@ -27,7 +27,7 @@ void SGFstream::save_sgf(std::string filename, GameState &state, bool append) {
     sgf.close();
 }
 
-void SGFstream::sgf_stream(std::ostream &out, GameState &state) {
+void SGFStream::sgf_stream(std::ostream &out, GameState &state) {
 
     const auto ruleToString = [=](Board::rule_t rule) -> std::string {
         if (rule == Board::rule_t::Tromp_Taylor) {

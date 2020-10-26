@@ -6,11 +6,9 @@
 #include <string>
 #include <iostream>
 
-class SGFstream {
+class SGFStream {
 public:
     static void save_sgf(std::string filename, GameState &state, bool append = false);
-
-private:
     static void sgf_stream(std::ostream &out, GameState &state);
 
 };

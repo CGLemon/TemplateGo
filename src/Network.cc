@@ -208,9 +208,8 @@ Network::get_output(const GameState *const state,
                     const int symmetry,
                     const bool read_cache,
                     const bool write_cache) {
+
     Netresult result;
-    //const size_t boardsize = state->board.get_boardsize();
-    //const size_t intersections = boardsize * boardsize;
 
     if (read_cache) {
         if (probe_cache(state, result, symmetry)) {
@@ -223,32 +222,13 @@ Network::get_output(const GameState *const state,
     } else if (ensemble == DIRECT) {
         assert(symmetry >= 0 && symmetry < NUM_SYMMETRIES);
         result = get_output_internal(state, symmetry);
-    } 
-/*
-  else if (ensemble == AVERAGE) {
-    assert(symmetry == -1);
-    for (int sym = 0; sym < NUM_SYMMETRIES; ++sym) {
-      auto tmpresult = get_output_internal(state, sym);
-      result.winrate[0] +=
-          tmpresult.winrate[0] / static_cast<float>(NUM_SYMMETRIES);
-      result.policy_pass +=
-          tmpresult.policy_pass / static_cast<float>(NUM_SYMMETRIES);
-
-      for (auto idx = size_t{0}; idx < intersections; idx++) {
-        result.policy[idx] +=
-            tmpresult.policy[idx] / static_cast<float>(NUM_SYMMETRIES);
-      }
-    }
-  } 
-*/
-    else {
+    } else {
         assert(ensemble == RANDOM_SYMMETRY);
         assert(symmetry == -1);
         auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
         const auto rand_sym = rng.randfix<NUM_SYMMETRIES>();
         result = get_output_internal(state, rand_sym);
     }
-
 
     if (write_cache) {
         m_cache.insert(state->board.get_hash(), result);

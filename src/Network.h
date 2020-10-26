@@ -32,6 +32,7 @@ public:
 
     void set_playouts(const int playouts);
 
+
 private:
     static constexpr int NUM_SYMMETRIES = Board::NUM_SYMMETRIES;
     static constexpr int IDENTITY_SYMMETRY = Board::IDENTITY_SYMMETRY;

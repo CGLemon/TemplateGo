@@ -1412,10 +1412,10 @@ void Board::sgf_stream(std::ostream &out,
         const auto x = get_x(vertex);
         const auto y = get_y(vertex);
 
-        const auto x_char = static_cast<char>(x) +
-                                (x < 25 ? 'a' : 'A');
-        const auto y_char = static_cast<char>(y) +
-                                (y < 25 ? 'a' : 'A');
+        const auto x_char = static_cast<char>(x +
+                                (x < 25 ? 'a' : 'A'));
+        const auto y_char = static_cast<char>(y +
+                                (y < 25 ? 'a' : 'A'));
 
         out << '[';
         out << x_char << y_char;
