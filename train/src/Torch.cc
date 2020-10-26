@@ -489,10 +489,10 @@ std::vector<torch::Tensor> Net::value_forward(torch::Tensor x) {
     auto finalscore = torch::flatten(v_pool, 1, 3);
     finalscore = FinalScoreFCLayer(finalscore);
 
-    auto winrate = torch::flatten(v_pool, 1, 3);
-    winrate = ValueFCLayer(winrate);
+    auto winrate_misc = torch::flatten(v_pool, 1, 3);
+    winrate_misc = ValueFCLayer(winrate_misc);
 
-    return std::vector<torch::Tensor>{scorebelief, ownership, finalscore, winrate};
+    return std::vector<torch::Tensor>{scorebelief, ownership, finalscore, winrate_misc};
 }
 
 std::array<torch::Tensor, 6> Net::forward(torch::Tensor planes, torch::Tensor features) {
@@ -529,13 +529,13 @@ std::array<torch::Tensor, 6> Net::forward(torch::Tensor planes, torch::Tensor fe
     */
     auto ownership = val[1];  
 
-    // Final score predicts the board on score with komi.
+    // Final score predicts the board on score without komi.
     auto finalscore = val[2];
 
     // Winrate Misc
-    auto winrate = val[3];  
+    auto winrate_misc = val[3];  
 
-    return std::array<torch::Tensor, 6>{prob, opp_prob, scorebelief, ownership, finalscore, winrate};
+    return std::array<torch::Tensor, 6>{prob, opp_prob, scorebelief, ownership, finalscore, winrate_misc};
 }
 
 std::vector<std::vector<float>> Net::gather_weights() {
@@ -737,7 +737,6 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
     // Be sure size of datas are correct. 
     assert(intput_planes_size == in_channels * intersections);
     assert(intput_features_size == in_features);
-
     assert(probabilities_size ==  1 + intersections);
     assert(ownership_size ==  intersections);
     assert(winrate_size == 1);
@@ -864,7 +863,7 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
         // miscs[0] : alpha
         // miscs[1] : beta
         // miscs[2] : gamma
-        return torch::tanh(((miscs[0] + c_komi) / miscs[1]) + miscs[2]);
+        return torch::tanh(((miscs[0] - c_komi) / miscs[1]) + miscs[2]);
     };
 
     const auto MSE = [](torch::Tensor x, float target) {
@@ -905,7 +904,7 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
     Loss_.emplace_back(std::pair<std::string, float>{"score belief pdf | coefficient : 1.5/intersections", scorebelief_pdf_loss.item<float>()});
     Loss_.emplace_back(std::pair<std::string, float>{"final score | coefficient : 0.0012", finalscore_loss.item<float>()});
     Loss_.emplace_back(std::pair<std::string, float>{"ownership | coefficient : 0.15/intersections", ownership_loss.item<float>()});
-    Loss_.emplace_back(std::pair<std::string, float>{"winrate | coefficient : 0.9", winrate_loss.item<float>()});
+    Loss_.emplace_back(std::pair<std::string, float>{"winrate | coefficient : 1.0", winrate_loss.item<float>()});
 
     return Loss_;
 }
