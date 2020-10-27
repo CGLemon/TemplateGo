@@ -9,12 +9,12 @@
 #define MARCO_MINIMAL_GTP_BOARD_SIZE (2)
 
 // The maximal of board size.
-#define MARCO_BOARD_SIZE (6)
+#define MARCO_BOARD_SIZE (7)
 
 // Avoid crazy komi.
 #define MARCO_MAXIMAL_KOMI (150.f)
 #define MARCO_MINIMAL_KOMI (-150.f)
-#define MARCO_KOMI (4.0f)
+#define MARCO_KOMI (9.0f)
 
 static_assert(MARCO_MAXIMAL_GTP_BOARD_SIZE >= MARCO_BOARD_SIZE &&
                   MARCO_BOARD_SIZE >= MARCO_MINIMAL_GTP_BOARD_SIZE, "Not support for this board size!\n");

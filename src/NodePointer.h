@@ -17,6 +17,9 @@ public:
     NodePointer(const NodePointer &) = delete;
     NodePointer& operator=(const NodePointer&);
 
+
+    ~NodePointer();
+
     bool is_pointer() const;
     bool is_inflating() const;
     bool is_uninflated() const;
@@ -111,6 +114,15 @@ void NodePointer<Node, Data>::inflate() {
             POINTER;
         auto old_ponter = m_pointer.exchange(new_ponter);
         assert(is_inflating(old_ponter));
+    }
+}
+
+template<typename Node, typename Data>
+NodePointer<Node, Data>::~NodePointer() {
+
+    auto v = m_pointer.load();
+    if (is_pointer(v)) {
+        delete read_ptr(v);
     }
 }
 

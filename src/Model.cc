@@ -545,7 +545,7 @@ NNResult Model::get_result(const GameState *const state,
     // Winrate misc
     result.alpha = values[0];
     result.beta = values[1];
-    result.gamma = values[2];
+    // result.gamma = values[2];
 
     return result;
 }
@@ -554,14 +554,15 @@ float Model::get_winrate(GameState &state, const NNResult &result) {
     const auto komi = state.get_komi();
     const auto color = state.get_to_move();
     const auto current_komi = (color == Board::BLACK ? komi : -komi);
-    return get_winrate(result, current_komi);
+    return get_winrate(state, result, current_komi);
 }
 
-float Model::get_winrate(const NNResult &result, float current_komi) {
+float Model::get_winrate(GameState &state, const NNResult &result, float current_komi) {
+    const auto intersections = state.get_intersections();
     const auto alpha =  result.alpha;
-    const auto beta =  result.beta;
+    const auto beta =  result.beta * 10.f / intersections;
     const auto gamme =  result.gamma;
-    auto winrate = std::tanh(((alpha - current_komi) / beta) + gamme);
+    auto winrate = std::tanh((-beta * (alpha - current_komi)) + gamme);
     return (winrate + 1.0f) / 2.0f;
 }
 

@@ -25,7 +25,7 @@ static constexpr auto OUTPUTS_SCOREBELIEF = 2;
 static constexpr auto OUTPUTS_OWNERSHIP = 1;
 
 static constexpr auto FINAL_SCORE = 1;
-static constexpr auto VALUE_MISC = 3;
+static constexpr auto VALUE_MISC = 2;
 // static constexpr auto VALUE_LABELS = 21;
 // static constexpr auto LABELS_CENTER = 10;
 static constexpr auto POTENTIAL_MOVES = NUM_INTERSECTIONS + 1;
@@ -141,7 +141,7 @@ struct Model {
                                const int symmetry);
 
     static float get_winrate(GameState &state, const NNResult &result);
-    static float get_winrate(const NNResult &result, float current_komi);
+    static float get_winrate(GameState &state, const NNResult &result, float current_komi);
 
     static void winograd_transform(std::shared_ptr<NNweights> &nn_weight);
 

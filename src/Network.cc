@@ -162,7 +162,7 @@ void Network::dummy_forward(std::vector<float> &policy,
 
     values[0] = 0.0f;
     values[1] = 1.0f;
-    values[2] = 0.0f;
+    // values[2] = 0.0f;
 
     for (auto &owner : ownership) {
         owner = 0.0f;
