@@ -91,8 +91,15 @@ struct ArgsParser {
                     i++;
                     weights_name = std::string{argv[i]};
                 }
-            } else if (cmd == "--CUP_only")  {
+            } else if (cmd == "--dumpStep") {
+                if (check_next(i, argc, argv)) {
+                    i++;
+                    dump_step = std::stoi(std::string{argv[i]});
+                }
+            } else if (cmd == "--CUP_only") {
                 force_cpu = true;
+            } else if (cmd == "--mixLimitKomi") {
+                limit_komi = true;
             }
         }
     }
@@ -133,8 +140,12 @@ struct ArgsParser {
         out << std::setw(remain) << " Learning rate"     << " : " << learning_rate      << std::endl;
         out << std::setw(remain) << " Weight decay"      << " : " << weight_decay       << std::endl;
         out << std::setw(remain) << " Weights name"      << " : " << weights_name       << std::endl;
+        out << std::setw(remain) << " Dump step"         << " : " << dump_step          << std::endl;
+
         if (force_cpu)
             out << std::setw(remain) << " CPU only" << " : TRUE" << std::endl;
+        if (limit_komi)
+            out << std::setw(remain) << " Mix limit komi"  << " : TRUE" << std::endl;
 
         out << std::setprecision(6); // back to default setting
     }
@@ -149,8 +160,10 @@ struct ArgsParser {
     int batch_size{0};
 
     bool force_cpu{false};
+    bool limit_komi{false};
     float learning_rate{0.0f};
     float weight_decay{0.0f};
+    int dump_step{1000};
     std::string weights_name{"_NO_WEIGHT_FILE_NAME_"};
 };
 
@@ -237,7 +250,11 @@ void training(ArgsParser &args, Loader &loader) {
                     batches[b].ownership[sym_idx] = (*buffer_ptr)->ownership[idx];
                 }
 
-                batches[b].current_komi = (*buffer_ptr)->current_komi;
+                if (args.limit_komi && sym % 2) {
+                    batches[b].current_komi = (*buffer_ptr)->limit_komi;
+                } else {
+                    batches[b].current_komi = (*buffer_ptr)->current_komi;
+                }
 
                 for (int idx = 0; idx < winrate_size; ++idx) {
                     batches[b].winrate[idx] = (*buffer_ptr)->winrate[idx];         
@@ -251,7 +268,7 @@ void training(ArgsParser &args, Loader &loader) {
             }
             backword_cnt++;
             const auto loss = train_helper->train_batch(batches);
-            if (backword_cnt % 1000 == 0) {
+            if (backword_cnt % args.dump_step == 0) {
                 printf("========================== step : %zu ==========================\n", backword_cnt);
                 for (auto &l : loss) {
                     const auto name = l.first;

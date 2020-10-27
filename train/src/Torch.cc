@@ -139,7 +139,7 @@ Net::Net(size_t boardsize,
     m_probbility_out = 1;
     m_scorebelief_out = 2;
     m_ownership_out = 1;
-    m_value_misc = 3;
+    m_value_misc = 2;
     m_finalscore_misc = 1;
 
     // BatchNorm Layer
@@ -858,12 +858,12 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
         return torch::mean(torch::mean(res, 1), 0);
     };
 
-    const auto misc2winrate = [](torch::Tensor &misc, torch::Tensor &c_komi) {
+    const auto misc2winrate = [](torch::Tensor misc, torch::Tensor c_komi, float intersections) {
         auto miscs = torch::chunk(misc, 3, 1);
         // miscs[0] : alpha
         // miscs[1] : beta
         // miscs[2] : gamma
-        return torch::tanh(((miscs[0] - c_komi) / miscs[1]) + miscs[2]);
+        return torch::tanh((-(miscs[1] * 10.f / intersections) * (miscs[0] - c_komi)) /* + miscs[2] */);
     };
 
     const auto MSE = [](torch::Tensor x, float target) {
@@ -880,8 +880,13 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
                               torch::mul(torch::log((ownership + 1)/2 + 0.0001f), batch_ownership), 1), 0) +
                               torch::mean(-torch::sum(torch::mul(torch::log((1 - ownership)/2 + 0.0001f), 1 - batch_ownership), // unreduce
                                   1), 0);
-    auto winrate_loss = torch::mse_loss(misc2winrate(winrate_misc, current_komi), batch_winrate) +
-                            MSE(misc2winrate(winrate_misc, batch_finalscore), 0.0f);
+
+    auto winrate_loss = torch::mse_loss(misc2winrate(winrate_misc, current_komi, (float)intersections), batch_winrate); // +
+                             // MSE(misc2winrate(winrate_misc, batch_finalscore + 1.0f), -1.0f) +
+                             // MSE(misc2winrate(winrate_misc, batch_finalscore - 1.0f),  1.0f);
+
+    // auto winrate_loss = torch::mse_loss(misc2winrate(winrate_misc, batch_finalscore - batch_winrate), batch_winrate);
+
 
     auto loss = 
         1.00f * policy_loss +
@@ -970,7 +975,7 @@ void Evaluation::dump_eval(torch::Tensor planes, torch::Tensor features, float c
     printf("Winrate | size %zu : \n", winrate_misc_vec.size());
     const auto alpha = winrate_misc_vec[0];
     const auto beta = winrate_misc_vec[1];
-    const auto gamma = winrate_misc_vec[2];
+    const auto gamma = 0.0f; // winrate_misc_vec[2];
     const auto w = std::tanh(((alpha - current_komi)/beta) + gamma);
     printf("alpha : %.5f, beta : %.5f, gamma : %.5f\n", alpha, beta, gamma);
     printf("%.5f",w);

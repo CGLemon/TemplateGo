@@ -21,6 +21,8 @@ struct Step {
     float final_score;
     float current_komi;
 
+    float limit_komi;
+
     std::vector<float> ownership;
     std::vector<float> winrate;
 };
