@@ -87,7 +87,7 @@ Engine::Response Engine::nn_rawout() {
     for (int y = 0; y < bsize; ++y) {
         for (int x = 0; x < bsize; ++x) {
             auto idx = m_state->get_index(x, y);
-            out << " " << std::setw(5) <<  std::fixed << std::setprecision(pres) << res.ownership[idx];
+            out << " " << std::setw(8) <<  std::fixed << std::setprecision(pres) << res.ownership[idx];
         }
         out << std::endl;
     }
@@ -233,5 +233,15 @@ Engine::Response Engine::nn_batchmark(const int times) {
 Engine::Response Engine::clear_cache() {
     m_evaluation->clear_cache();
     return Response{};
+}
+
+Engine::Response Engine::random_playmove() {
+    auto move = m_search->think(Search::strategy_t::RANDOM);
+    m_state->play_move(move);
+    return m_state->vertex_to_string(move);
+}
+
+const GameState& Engine::get_state() const {
+    return *m_state;
 }
 

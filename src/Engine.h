@@ -54,6 +54,10 @@ public:
 
     Response clear_cache();
 
+    Response random_playmove();
+
+    const GameState& get_state() const;
+
 private:
     std::shared_ptr<Evaluation> m_evaluation{nullptr};
     std::shared_ptr<Trainer> m_trainer{nullptr};

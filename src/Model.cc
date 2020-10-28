@@ -559,10 +559,10 @@ float Model::get_winrate(GameState &state, const NNResult &result) {
 
 float Model::get_winrate(GameState &state, const NNResult &result, float current_komi) {
     const auto intersections = state.get_intersections();
-    const auto alpha =  result.alpha;
-    const auto beta =  result.beta * 10.f / intersections;
-    const auto gamme =  result.gamma;
-    auto winrate = std::tanh((-beta * (alpha - current_komi)) + gamme);
+    const auto alpha = result.alpha;
+    const auto beta = std::exp(result.beta) * 10.f / intersections;
+    const auto gamme = result.gamma;
+    auto winrate = std::tanh((beta * (alpha - current_komi)) + gamme);
     return (winrate + 1.0f) / 2.0f;
 }
 

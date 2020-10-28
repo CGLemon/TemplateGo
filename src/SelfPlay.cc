@@ -1,5 +1,8 @@
 #include "SelfPlay.h"
+#include "Random.h"
+
 #include <sstream>
+#include <random>
 
 SelfPlay::SelfPlay() {
     init();
@@ -85,11 +88,47 @@ void SelfPlay::execute(Utils::CommandParser &parser) {
 }
 
 void SelfPlay::start_selfplay() {
+
+    const auto state = m_selfplay_engine->get_state();
+    const auto default_komi = state.get_komi();
+    const auto boardsize = state.get_boardsize();
+
     for (int g = 0; g < m_max_selfplay_games.load(); ++g) {
-        m_selfplay_engine->self_play();
-        m_selfplay_engine->dump_sgf(sgf_filename);
-        m_selfplay_engine->dump_collect(data_filename);
-        m_selfplay_engine->clear_board();
-        m_selfplay_engine->clear_cache();
+        auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
+        if (rng.randfix<10>() < 3) { // 30%
+            from_scratch();
+        }
+
+        komi_randomize(default_komi, boardsize);
+        normal_selfplay();
     }
+}
+
+void SelfPlay::normal_selfplay() {
+    m_selfplay_engine->self_play();
+    m_selfplay_engine->dump_sgf(sgf_filename);
+    m_selfplay_engine->dump_collect(data_filename);
+    m_selfplay_engine->clear_board();
+    m_selfplay_engine->clear_cache();
+}
+
+void SelfPlay::from_scratch() {
+    auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
+    // Moves 1~6 stones
+    const int moves = rng.randfix<6>() + 1;
+    for (auto m = 0; m < moves; ++m) {
+        m_selfplay_engine->random_playmove();
+    }
+}
+
+void SelfPlay::komi_randomize(const float center_komi, const int boardsize) {
+
+    const int intersections = boardsize * boardsize;
+    const float div = boardsize - 0.0f;
+
+    auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
+    std::normal_distribution<float> dis(0.0f, (float)intersections / div);
+    const int res = static_cast<int>(dis(rng) + center_komi);
+
+    m_selfplay_engine->reset_komi((float)res);
 }

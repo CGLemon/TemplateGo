@@ -859,11 +859,11 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
     };
 
     const auto misc2winrate = [](torch::Tensor misc, torch::Tensor c_komi, float intersections) {
-        auto miscs = torch::chunk(misc, 3, 1);
+        auto miscs = torch::chunk(misc, 2, 1);
         // miscs[0] : alpha
         // miscs[1] : beta
         // miscs[2] : gamma
-        return torch::tanh((-(miscs[1] * 10.f / intersections) * (miscs[0] - c_komi)) /* + miscs[2] */);
+        return torch::tanh((torch::exp(miscs[1]) * 10.f / intersections) * (miscs[0] - c_komi) /* + miscs[2] */);
     };
 
     const auto MSE = [](torch::Tensor x, float target) {
@@ -881,12 +881,7 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
                               torch::mean(-torch::sum(torch::mul(torch::log((1 - ownership)/2 + 0.0001f), 1 - batch_ownership), // unreduce
                                   1), 0);
 
-    auto winrate_loss = torch::mse_loss(misc2winrate(winrate_misc, current_komi, (float)intersections), batch_winrate); // +
-                             // MSE(misc2winrate(winrate_misc, batch_finalscore + 1.0f), -1.0f) +
-                             // MSE(misc2winrate(winrate_misc, batch_finalscore - 1.0f),  1.0f);
-
-    // auto winrate_loss = torch::mse_loss(misc2winrate(winrate_misc, batch_finalscore - batch_winrate), batch_winrate);
-
+    auto winrate_loss = torch::mse_loss(misc2winrate(winrate_misc, current_komi, (float)intersections), batch_winrate);
 
     auto loss = 
         1.00f * policy_loss +

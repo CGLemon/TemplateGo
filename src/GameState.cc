@@ -351,3 +351,7 @@ float GameState::get_komi() const {
 void GameState::set_komi(const float komi) {
     board.set_komi(komi);
 }
+
+int GameState::get_last_move() const {
+    return board.get_last_move();
+}

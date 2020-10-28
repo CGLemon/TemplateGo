@@ -72,12 +72,21 @@ int Search::random_move(bool allow_pass) {
     int move = 0;  
 
     auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
-    const size_t boardsize = m_rootstate.get_boardsize();
-    const size_t intersections = m_rootstate.get_intersections();
+    const auto boardsize = m_rootstate.get_boardsize();
+    const auto intersections = m_rootstate.get_intersections();
+    const auto last_move = m_rootstate.get_last_move();
+
+    if (last_move == Board::PASS) {
+        const auto movenum = m_rootstate.get_movenum();
+        if ((intersections - movenum) < (intersections * m_parameters->allowed_pass_ratio)) {
+            allow_pass = false;
+        }
+    }
+
     while (true) {
-        const size_t randmove = rng.randuint64() % intersections;
-   
-        if (randmove == intersections && allow_pass) {
+        const auto randmove = rng.randuint64() % intersections;
+
+        if ((int)randmove == intersections && allow_pass) {
             move = Board::PASS;
             break;
         } else {

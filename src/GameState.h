@@ -65,6 +65,7 @@ public:
 
     int get_boardsize() const;
     int get_to_move() const;
+    int get_last_move() const;
     int get_intersections() const;
     int get_movenum() const;
     int get_vertex(const int x, const int y) const;
@@ -114,5 +115,6 @@ inline int GameState::get_vertex(const int x, const int y) const {
 inline int GameState:: get_index(const int x, const int y) const {
     return board.get_index(x, y);
 }
+
 
 #endif

@@ -20,6 +20,9 @@ private:
     void execute(Utils::CommandParser &parser);
 
     void start_selfplay();
+    void normal_selfplay();
+    void from_scratch();
+    void komi_randomize(const float center_komi, const int boardsize);
 
     Engine *m_selfplay_engine{nullptr};
 
