@@ -227,8 +227,8 @@ void Search::updata_root(UCTNode *root_node) {
     auto_printf(" NN eval = ");
     auto_printf("%f%% \n", eval);
 
-  
-    auto final_score = nn_output->final_score;
+    const auto komi = m_rootstate.get_komi();
+    auto final_score = nn_output->final_score - komi;
     if (to_move == Board::WHITE) {
         final_score = 0 - final_score;
     }

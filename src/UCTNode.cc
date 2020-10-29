@@ -805,10 +805,10 @@ bool Heuristic::should_be_resign(GameState &state, UCTNode *node, float threshol
 
 
 bool Heuristic::pass_to_win(GameState &state) {
-    if (state.board.get_last_move() == Board::PASS) {
-        const auto color = state.get_to_move();
+    if (state.get_last_move() == Board::PASS) {
         // const auto addition_komi = option<int>("mutil_labeled_komi");
         const auto res = state.final_score();
+        const auto color = state.get_to_move();
         if (color == Board::BLACK && res > 0.f) {
             return true;
         } else if (color == Board::WHITE && res < 0.f) {
@@ -820,7 +820,7 @@ bool Heuristic::pass_to_win(GameState &state) {
 }
 
 void UCT_Information::dump_stats(GameState &state, UCTNode *node, int cut_off) {
-    const auto color = state.board.get_to_move();
+    const auto color = state.get_to_move();
     const auto lcblist = node->get_lcb_list(color);
     const auto parents_visits = static_cast<float>(node->get_visits());
     assert(color == node->get_color());
@@ -833,13 +833,13 @@ void UCT_Information::dump_stats(GameState &state, UCTNode *node, int cut_off) {
         return komi;
     };
 
-    const auto komi = state.board.get_komi();
+    const auto komi = state.get_komi();
     const auto root_ownership = node->get_ownership(color);
     Utils::auto_printf("Search List :\n"); 
     Utils::auto_printf("Root -> %7d (V: %5.2f%%) (S: %5.2f | %5.2f)\n",
                        node->get_visits(),
                        node->get_eval(color, false) * 100.f,
-                       node->get_final_score(color),
+                       node->get_final_score(color)  + add_komi(komi, color),
                        std::accumulate(std::begin(root_ownership), std::end(root_ownership), add_komi(komi, color)));
 
     int push = 0;
@@ -856,7 +856,7 @@ void UCT_Information::dump_stats(GameState &state, UCTNode *node, int cut_off) {
         const auto move = state.vertex_to_string(vtx);
         const auto pv_string = move + " " + pv_to_srting(child, state);
         const auto visit_ratio = static_cast<float>(visits) / parents_visits;
-        const auto score_belief = child->get_final_score(color);
+        const auto final_score = child->get_final_score(color) + add_komi(komi, color);
         const auto ownership = child->get_ownership(color);
         auto owner_sum =
             std::accumulate(std::begin(ownership), std::end(ownership), add_komi(komi, color));
@@ -867,8 +867,7 @@ void UCT_Information::dump_stats(GameState &state, UCTNode *node, int cut_off) {
                             eval * 100.f, 
                             lcb_value * 100.f,
                             visit_ratio * 100.f,
-                            //pobability * 100.f,
-                            score_belief, owner_sum,
+                            final_score, owner_sum,
                             pv_string.c_str());
 
         push++;

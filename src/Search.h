@@ -26,8 +26,9 @@ public:
 
     void from_score(GameState &state) {
         m_nn_outout = std::make_shared<NNOutput>();
-        // const auto addition_komi = option<int>("mutil_labeled_komi");
+
         const auto board_score = state.final_score();
+        const auto komi = state.get_komi();
 
         if (board_score > 0.0f) {
             m_nn_outout->eval = 1.0f;
@@ -37,7 +38,7 @@ public:
             m_nn_outout->eval = 0.5f;
         }
 
-        m_nn_outout->final_score = board_score;
+        m_nn_outout->final_score = board_score + komi;
     
         const auto ownership = state.board.get_ownership();
         const auto o_size = ownership.size();
