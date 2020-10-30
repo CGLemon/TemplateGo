@@ -108,6 +108,7 @@ private:
         std::vector<float> &out_val;
         std::condition_variable cv;
         std::mutex mutex;
+        std::atomic<bool> done{false};
 
         ForwawrdEntry(const int bsize,
                       const std::vector<float> &planes,

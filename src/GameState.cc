@@ -80,9 +80,9 @@ bool GameState::play_textmove(std::string input) {
             return Board::NO_VERTEX;
         }
 
-        if (text == "PASS") {
+        if (text == "PASS" || text == "pass") {
             return Board::PASS;
-        } else if (text == "RESIGN") {
+        } else if (text == "RESIGN" || text == "resign") {
             return Board::RESIGN;
         }
 

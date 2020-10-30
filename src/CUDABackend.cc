@@ -77,6 +77,7 @@ void CUDAbackend::forward(const int boardsize,
             m_cv.notify_one();
         }
         entry->cv.wait(lock);
+        entry->done.store(true);
     }
 }
 
@@ -212,7 +213,9 @@ void CUDAbackend::worker() {
             std::copy(std::begin(batch_out_val) + index * out_val_size,
                       std::begin(batch_out_val) + (index+1) * out_val_size,
                       std::begin(x->out_val));
-            x->cv.notify_all();
+            while (!x->done.load()) {
+                x->cv.notify_all();
+            }
             index++;
         }
         if (batch_size <= (size_t)option<int>("batchsize")) {
