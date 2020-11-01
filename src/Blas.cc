@@ -217,7 +217,7 @@ void Blas::dense(const int input_size,
 #ifdef USE_OPENBLAS
     if (batch_size == 1) {
         cblas_sgemv(CblasRowMajor, CblasNoTrans,
-                    output_size, input_size, 1.0f, weights,
+                    output_size, input_size, 1.0f, kernel,
                     input_size, inputs, 1, 0.0f, outputs, 1);
     } else {
         cblas_sgemm(CblasColMajor, CblasTrans, CblasNoTrans,

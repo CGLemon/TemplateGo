@@ -66,7 +66,9 @@ std::vector<float> get_weights_from_file(std::istream &weights_file) {
     auto line = std::string{};
 
     if (std::getline(weights_file, line)) {
-        float weight;
+        // On MacOS, if the number is too small, stringstream
+        // can not parser the number to float.
+        double weight;
         std::stringstream line_buffer(line);
         while(line_buffer >> weight) {
             weights.emplace_back(weight);
