@@ -64,6 +64,16 @@ public:
           return static_cast<std::uint32_t>(randuint64()) % Range;
     }
 
+    template<int precision>
+    bool roulette(float threshold) {
+        const int res = randfix<precision>();
+        const int thres = (float)precision * threshold;
+        if (thres < res) {
+            return true;
+        }
+        return false;
+    }
+
     // It is the interface for STL.
     using result_type = std::uint64_t;
 

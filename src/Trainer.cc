@@ -158,6 +158,7 @@ void Trainer::gather_step(GameState &state, UCTNode &node) {
     auto to_move = state.board.get_to_move();
     assert(to_move == node.get_color());
 
+    step.num_move = state.get_movenum();
     step.probabilities = std::vector<float>(intersections+1, 0.0f);
     bool success = gather_probabilities(state, node, step.probabilities, 1.0f);
 
@@ -183,6 +184,7 @@ void Trainer::gather_step(GameState &state, const int vtx) {
     const auto intersections = state.get_intersections();
     auto step = Step{};
   
+    step.num_move = state.get_movenum();
     step.probabilities = std::vector<float>(intersections+1, 0.0f);
     int idx = Board::NO_INDEX;
     if (vtx == Board::PASS) {
@@ -324,7 +326,15 @@ void Trainer::dump_memory() const {
 }
 
 void Trainer::data_stream(std::ostream &out) {
+
+    auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
+    auto cutoff = rng.roulette<10000>(option<float>("cutoff_threshold"));
+
     for (auto &x : game_steps) {
+        const auto num_move = x.num_move;
+        if (cutoff && num_move > option<int>("cutoff_movenum")) {
+            continue;
+        }
         x.step_stream(out);
     }
 }

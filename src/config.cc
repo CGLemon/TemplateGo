@@ -104,6 +104,8 @@ void init_options_map() {
     // self-play
     options_map["random_move"] << Utils::Option::setoption(false);
     options_map["random_move_div"] << Utils::Option::setoption(1);
+    options_map["cutoff_threshold"] << Utils::Option::setoption(1.0f);
+    options_map["cutoff_movenum"] << Utils::Option::setoption(0);
 }
 
 void init_basic_parameters() {
@@ -162,12 +164,6 @@ ArgsParser::ArgsParser(int argc, char** argv) {
         }
     }
 
-    if (const auto res = parser.find_next("--boardsize")) {
-        if (is_parameter(res->str)) {
-            set_option("boardsize", res->get<int>());
-        }
-    }
-
     if (const auto res = parser.find_next(List{"--batchsize", "-b"})) {
         if (is_parameter(res->str)) {
             set_option("batchsize", res->get<int>());
@@ -189,6 +185,19 @@ ArgsParser::ArgsParser(int argc, char** argv) {
             }
         }
     }
+
+    if (const auto res = parser.find_next("--cutoff_thres")) {
+        if (is_parameter(res->str)) {
+            set_option("cutoff_threshold", res->get<float>());
+        }
+    }
+
+    if (const auto res = parser.find_next("--cutoff_move")) {
+        if (is_parameter(res->str)) {
+            set_option("cutoff_movenum", res->get<int>());
+        }
+    }
+
 
     if (const auto res = parser.find_next("--resigned")) {
         if (is_parameter(res->str)) {
