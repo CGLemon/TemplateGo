@@ -754,7 +754,7 @@ Train_helper::train_batch(std::vector<TrainDataBuffer> &buffer) {
     torch::Tensor batch_scorebelief = torch::zeros({batch_size, scorebelief_size});
     torch::Tensor batch_finalscore = torch::zeros({batch_size, finalscore_size});
     torch::Tensor batch_ownership = torch::zeros({batch_size, ownership_size});
-    torch::Tensor current_komi = torch::zeros({batch_size, 1}); // Calculate the forward winrate.
+    torch::Tensor current_komi = torch::zeros({batch_size, 1});
     torch::Tensor batch_winrate = torch::zeros({batch_size, winrate_size});
   
     auto batch_policy_ptr = (float*)batch_policy.data_ptr();

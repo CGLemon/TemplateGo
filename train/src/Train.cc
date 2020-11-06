@@ -98,8 +98,6 @@ struct ArgsParser {
                 }
             } else if (cmd == "--CUP_only") {
                 force_cpu = true;
-            } else if (cmd == "--mixLimitKomi") {
-                limit_komi = true;
             }
         }
     }
@@ -144,8 +142,6 @@ struct ArgsParser {
 
         if (force_cpu)
             out << std::setw(remain) << " CPU only" << " : TRUE" << std::endl;
-        if (limit_komi)
-            out << std::setw(remain) << " Mix limit komi"  << " : TRUE" << std::endl;
 
         out << std::setprecision(6); // back to default setting
     }
@@ -160,7 +156,6 @@ struct ArgsParser {
     int batch_size{0};
 
     bool force_cpu{false};
-    bool limit_komi{false};
     float learning_rate{0.0f};
     float weight_decay{0.0f};
     int dump_step{1000};
@@ -250,11 +245,8 @@ void training(ArgsParser &args, Loader &loader) {
                     batches[b].ownership[sym_idx] = (*buffer_ptr)->ownership[idx];
                 }
 
-                if (args.limit_komi && sym % 2) {
-                    batches[b].current_komi = (*buffer_ptr)->limit_komi;
-                } else {
-                    batches[b].current_komi = (*buffer_ptr)->current_komi;
-                }
+                batches[b].current_komi = (*buffer_ptr)->current_komi;
+
 
                 for (int idx = 0; idx < winrate_size; ++idx) {
                     batches[b].winrate[idx] = (*buffer_ptr)->winrate[idx];         

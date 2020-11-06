@@ -171,9 +171,6 @@ void Loader::load_data(std::string &filename){
         std::getline(file, line);
         winrate_stream(step.winrate, line);
 
-
-        step.limit_komi = step.final_score - step.winrate[0];
-
         m_buffer.emplace_back(
             std::make_shared<Step>(std::move(step)));
 
