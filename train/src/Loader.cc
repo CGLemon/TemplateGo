@@ -6,15 +6,15 @@
 #include <fstream>
 #include <iomanip>
 
-#define EXTRACTION(exp)              \
-if ((hex & exp) != 0) {              \
-    input_planes.emplace_back(1.0f); \
-} else {                             \
-    input_planes.emplace_back(0.0f); \
+#define EXTRACTION(exp)               \
+if ((hex & exp) != 0) {               \
+    input_planes.emplace_back(true);  \
+} else {                              \
+    input_planes.emplace_back(false); \
 }
 
 
-void Loader::input_planes_stream(std::vector<float> &input_planes, std::string &in) {
+void Loader::input_planes_stream(std::vector<bool> &input_planes, std::string &in) {
 
     const size_t binary_cnt = m_boardsize * m_boardsize * m_input_channels;
 
@@ -193,14 +193,36 @@ const std::list<std::shared_ptr<const Step>> &Loader::get_buffer() const {
 void Loader::memory_used_stream(std::ostream &out) const {
 
     auto memory = size_t{0};
-    for (auto &step : m_buffer) {
+    for (const auto &step : m_buffer) {
         memory += sizeof(std::shared_ptr<Step>);
-        memory += sizeof(*step);
+
+        memory += sizeof(step->boardsize);
+        memory += sizeof(step->scorebelief_idx);
+        memory += sizeof(step->final_score);
+        memory += sizeof(step->current_komi);
+
+        memory += sizeof(step->input_planes);
+        memory += sizeof(bool) * step->input_planes.capacity();
+
+        memory += sizeof(step->input_features);
+        memory += sizeof(float) * step->input_features.capacity();
+
+        memory += sizeof(step->probabilities);
+        memory += sizeof(float) * step->probabilities.capacity();
+
+        memory += sizeof(step->opponent_probabilities);
+        memory += sizeof(float) * step->opponent_probabilities.capacity();
+
+        memory += sizeof(step->ownership);
+        memory += sizeof(float) * step->ownership.capacity();
+
+        memory += sizeof(step->winrate);
+        memory += sizeof(float) * step->winrate.capacity();
     }
 
-    auto mb = static_cast<float>(memory) / (1024.f *1024.f);
- 
+    const auto mb = static_cast<float>(memory) / (1024.f * 1024.f);
     const int remain = 7;
+
     out << "========== Loader ==========" << std::endl;
     out << std::setw(remain) << " Steps"  << " : "  << m_buffer.size() << " count" << std::endl;
     out << std::setw(remain) << " Memory" << " : "  << mb              << " MB"    << std::endl;

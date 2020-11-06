@@ -217,7 +217,7 @@ void training(ArgsParser &args, Loader &loader) {
                     for (int idx = 0; idx < intersections; ++idx) {
                         const int sym_idx = symmetry.get_transform_idx(idx, sym);
                         const int start = c * intersections;
-                        batches[b].input_planes[start + sym_idx] = (*buffer_ptr)->input_planes[start + idx];
+                        batches[b].input_planes[start + sym_idx] = (float)((*buffer_ptr)->input_planes[start + idx]);
                     }
                 }
 

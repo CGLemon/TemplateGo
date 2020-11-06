@@ -11,7 +11,7 @@
 
 struct Step {
     int boardsize;
-    std::vector<float> input_planes;
+    std::vector<bool> input_planes;
     std::vector<float> input_features;
 
     std::vector<float> probabilities;
@@ -46,7 +46,7 @@ public:
 
 private:
 // intput
-    void input_planes_stream(std::vector<float> &input_planes, std::string &in);
+    void input_planes_stream(std::vector<bool> &input_planes, std::string &in);
 
     void input_features_stream(std::vector<float> &input_features, std::string &in);
 
