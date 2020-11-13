@@ -46,6 +46,7 @@ GPU 加速 （加速 GPU 端神經網路運算，cuDNN可選）
 
 
 # GTP 介面
+
 可以使用支援 GTP 的 UI 介面（例：sabaki https://sabaki.yichuanshen.de/ ），以下範例
 
     $ ./TemplateGo --mode gtp -w <Network file>.txt -p 100
@@ -54,7 +55,8 @@ GPU 加速 （加速 GPU 端神經網路運算，cuDNN可選）
 
 
 # 測試的權重
-這是在七路棋盤上自我對戰 1 萬盤的結果，主要用來 debug ，未來會重新訓練更大棋盤的權重。
+
+這是在九路棋盤上自我對戰的權重，歡迎下載並使用。
 
 https://drive.google.com/drive/folders/1h4aDtKZV1NMG9IJggwHFYJ1EvslzYoVq?usp=sharing
 
@@ -63,6 +65,5 @@ https://drive.google.com/drive/folders/1h4aDtKZV1NMG9IJggwHFYJ1EvslzYoVq?usp=sha
 - [ ] 支援 SGF 格式
 - [ ] 增加參數的優化算法 
 - [ ] 提昇 CUDA 運行效率 
-- [ ] 增加 GPU 端多線程的加速 
 - [ ] 增加 OpenCL 的支援 
 - [ ] 提昇內建 blas 的效率 
