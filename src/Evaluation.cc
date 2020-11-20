@@ -15,8 +15,9 @@ void Evaluation::initialize_network(int playouts,
 }
 
 Evaluation::NNeval Evaluation::network_eval(GameState &state,
-                                            Network::Ensemble ensemble) {
-    return m_network.get_output(&state, ensemble);
+                                            Network::Ensemble ensemble,
+                                            const int symmetry) {
+    return m_network.get_output(&state, ensemble, symmetry);
 }
 
 void Evaluation::reload_network(std::string &weightsfile) {

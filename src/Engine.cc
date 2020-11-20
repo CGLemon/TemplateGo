@@ -1,6 +1,7 @@
 #include "Engine.h"
 #include "Utils.h"
 #include "Model.h"
+#include "Network.h"
 #include <cassert>
 
 void Engine::initialize() {
@@ -57,8 +58,9 @@ Engine::Response Engine::showboard(int t) {
     return m_state->display_to_string(t);
 }
 
-Engine::Response Engine::nn_rawout() {
-    auto res = m_evaluation->network_eval(*m_state);
+Engine::Response Engine::nn_rawout(int symmetry) {
+
+    auto res = m_evaluation->network_eval(*m_state,  Network::Ensemble::DIRECT, symmetry);
     auto pres = option<int>("float_precision");
     auto out = std::ostringstream{};
 

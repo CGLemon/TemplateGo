@@ -95,7 +95,7 @@ void SelfPlay::start_selfplay() {
 
     for (int g = 0; g < m_max_selfplay_games.load(); ++g) {
         auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
-        if (rng.randfix<10>() < 3) { // 30%
+        if (rng.randfix<10>() < 2) { // 20%
             from_scratch();
         }
 
@@ -124,7 +124,7 @@ void SelfPlay::from_scratch() {
 void SelfPlay::komi_randomize(const float center_komi, const int boardsize) {
 
     const int intersections = boardsize * boardsize;
-    const float div = boardsize - 0.0f;
+    const float div = boardsize + 2.0f;
 
     auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
     std::normal_distribution<float> dis(0.0f, (float)intersections / div);

@@ -28,7 +28,7 @@ public:
 
     Response showboard(int t = 0);
 
-    Response nn_rawout();
+    Response nn_rawout(int symmetry = 0);
 
     Response reset_boardsize(const int bsize);
 

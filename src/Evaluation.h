@@ -17,7 +17,8 @@ public:
 
     void initialize_network(int playouts, const std::string &weightsfile);
     NNeval network_eval(GameState &state,
-                        Network::Ensemble ensemble = Network::RANDOM_SYMMETRY);
+                        Network::Ensemble ensemble = Network::RANDOM_SYMMETRY,
+                        const int symmetry = -1);
 
     void reload_network(std::string &weightsfile);
 

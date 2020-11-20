@@ -68,8 +68,17 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         lambda_syntax_not_understood(parser, 1);
         out << m_ascii_engine->showboard();
     } else if (const auto res = parser.find("raw-nn", 0)) {
-        lambda_syntax_not_understood(parser, 1);
-        out << m_ascii_engine->nn_rawout();
+        lambda_syntax_not_understood(parser, 2);
+        if (const auto in = parser.get_commands(1)) {
+            const auto sym = std::stoi(in->str);
+            if (sym >= 0 && sym <= 7) {
+                out << m_ascii_engine->nn_rawout(sym);
+            } else {
+                out << "integral must less than 8 and great than 0 (include 0)";
+            }
+        } else {
+            out << "syntax error : raw-nn <integral>";
+        }
     } else if (const auto res = parser.find("komi", 0)) {
         lambda_syntax_not_understood(parser, 2);
         if (const auto in = parser.get_commands(1)) {

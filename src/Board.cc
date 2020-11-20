@@ -459,6 +459,10 @@ void Board::text_display() const {
     auto_printf("%s\n", res.c_str());
 }
 
+std::uint64_t Board::calc_symmerty_hash(int sym) const {
+    return calc_hash(m_komove, sym);
+}
+
 std::uint64_t Board::calc_hash(int komove, int sym) const {
 
     std::uint64_t res = calc_ko_hash(sym);

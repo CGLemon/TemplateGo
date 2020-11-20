@@ -166,6 +166,7 @@ public:
     * =====================================================================
     */
     std::uint64_t komi_hash(const float komi) const;
+    std::uint64_t calc_symmerty_hash(int sym) const;
     std::uint64_t calc_hash(int komove, int sym = IDENTITY_SYMMETRY) const;
     std::uint64_t calc_ko_hash(int sym = IDENTITY_SYMMETRY) const;
 

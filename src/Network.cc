@@ -111,12 +111,12 @@ bool Network::probe_cache(const GameState *const state,
                           Network::Netresult &result,
                           const int symmetry) {
 
-    const bool success = m_cache.lookup(state->board.get_hash(), result);
-
-    if (success) {
-        // result = Model::get_result_form_cache(result);
+    bool success = false;
+    if (symmetry == -1 || symmetry == IDENTITY_SYMMETRY) {
+        success = m_cache.lookup(state->board.get_hash(), result);
+    } else {
+        success = m_cache.lookup(state->board.calc_symmerty_hash(symmetry), result);
     }
-
   // If we are not generating a self-play game, try to find
   // symmetries if we are in the early opening.
   /*
@@ -184,6 +184,7 @@ Network::Netresult Network::get_output_internal(const GameState *const state,
     const auto boardsize = state->board.get_boardsize();
     const auto input_planes = Model::gather_planes(state, symmetry);
     const auto input_features = Model::gather_features(state);
+
     if (m_forward->valid()) {
         m_forward->forward(boardsize, input_planes, input_features,
                            policy_out, scorebelief_out, ownership_out, finalscore_out, winrate_out);
@@ -211,11 +212,12 @@ Network::get_output(const GameState *const state,
 
     Netresult result;
 
-    if (read_cache) {
-        if (probe_cache(state, result, symmetry)) {
+    if (read_cache && symmetry == -1) {
+        if (probe_cache(state, result)) {
             return result;
         }
     }
+
     if (ensemble == NONE) {
         assert(symmetry == -1);
         result = get_output_internal(state, IDENTITY_SYMMETRY);
@@ -230,8 +232,8 @@ Network::get_output(const GameState *const state,
         result = get_output_internal(state, rand_sym);
     }
 
-    if (write_cache) {
-        m_cache.insert(state->board.get_hash(), result);
+    if (write_cache && symmetry == -1) {
+        m_cache.insert(state->board.calc_symmerty_hash(symmetry), result);
     }
     return result;
 }
