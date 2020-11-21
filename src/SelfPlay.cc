@@ -124,7 +124,7 @@ void SelfPlay::from_scratch() {
 void SelfPlay::komi_randomize(const float center_komi, const int boardsize) {
 
     const int intersections = boardsize * boardsize;
-    const float div = boardsize + 2.0f;
+    const float div = boardsize + 6.0f;
 
     auto rng = Random<random_t::XoroShiro128Plus>::get_Rng();
     std::normal_distribution<float> dis(0.0f, (float)intersections / div);

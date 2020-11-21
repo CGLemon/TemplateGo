@@ -155,7 +155,7 @@ void Network::dummy_forward(std::vector<float> &policy,
         p = dis(rng);
     }
     const auto acc = std::accumulate(std::begin(policy),
-                                         std::end(policy), 0.0f);
+                                     std::end(policy), 0.0f);
     for (auto & p : policy) {
         p /= acc;
     }
@@ -233,7 +233,7 @@ Network::get_output(const GameState *const state,
     }
 
     if (write_cache && symmetry == -1) {
-        m_cache.insert(state->board.calc_symmerty_hash(symmetry), result);
+        m_cache.insert(state->board.get_hash(), result);
     }
     return result;
 }
