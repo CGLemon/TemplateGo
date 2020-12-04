@@ -21,9 +21,18 @@ void TimeControl::gether_time_settings(const int main_time,
     m_byotime = byo_yomi_time;
     m_byostones = byo_yomi_stones;
 
+    if (m_maintime <= 0) {
+        m_maintime = 0;
+    }
+
     if (m_byostones <= 0 || m_byotime <= 0) {
         m_byotime = 0;
         m_byostones = 0;
+    }
+
+    if (m_maintime == 0 && m_byostones == 0) {
+        // infinite time
+        m_maintime = 60 * 60 * 24 * 7;
     }
 
     reset();
