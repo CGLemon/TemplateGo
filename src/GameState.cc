@@ -325,8 +325,8 @@ void GameState::recount_time(const int color) {
     m_time_control.spend_time(color);
 }
 
-void GameState::set_time_left(int color, int main_time, int byo_time, int stones) {
-    m_time_control.set_time_left(color, main_time, byo_time, stones);
+void GameState::set_time_left(int color, int time, int stones) {
+    m_time_control.set_time_left(color, time, stones);
 }
 
 bool GameState::is_legal(const int vtx,

@@ -160,13 +160,18 @@ int estimate_moves_expected(int boardsize, int num_move, int div_delta) {
     return estimate_moves;
 }
 
-void TimeControl::set_time_left(const int color, const int main_time,
-                                const int byo_time, const int stones) {
+void TimeControl::set_time_left(const int color, const int time, const int stones) {
 
     assert(color == Board::BLACK || color == Board::WHITE);
-    m_maintime_left[color] = static_cast<float>(main_time);
-    m_byotime_left[color] = static_cast<float>(byo_time);
-    m_stones_left[color] = stones;
+    if (stones <= 0) {
+        m_maintime_left[color] = static_cast<float>(time);
+        m_byotime_left[color] = 0.0f;
+        m_stones_left[color] = 0;
+    } else {
+        m_maintime_left[color] = 0.0f;
+        m_byotime_left[color] = static_cast<float>(time);
+        m_stones_left[color] = stones;
+    }
     check_in_byo();
 }
 

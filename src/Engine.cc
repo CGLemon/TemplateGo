@@ -243,6 +243,26 @@ Engine::Response Engine::random_playmove() {
     return m_state->vertex_to_string(move);
 }
 
+Engine::Response Engine::time_settings(int maintime, int byotime, int byostones) {
+
+    set_option("maintime", maintime);
+    set_option("byotime", byotime);
+    set_option("byostones", byostones);
+    m_state->reset_time();
+    return Response{};
+}
+
+Engine::Response Engine::time_left(std::string color, int time, int stones) {
+
+    if (color == "b" || color == "B" || color == "black") {
+        m_state->set_time_left(Board::BLACK, time, stones);
+    } else if (color == "w" || color == "W" || color == "white") {
+        m_state->set_time_left(Board::WHITE, time, stones);
+    }
+
+    return Response{};
+}
+
 const GameState& Engine::get_state() const {
     return *m_state;
 }

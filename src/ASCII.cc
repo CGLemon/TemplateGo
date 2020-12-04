@@ -69,7 +69,7 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         out << m_ascii_engine->showboard();
     } else if (const auto res = parser.find("raw-nn", 0)) {
         lambda_syntax_not_understood(parser, 2);
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             const auto sym = std::stoi(in->str);
             if (sym >= 0 && sym <= 7) {
                 out << m_ascii_engine->nn_rawout(sym);
@@ -81,21 +81,21 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         }
     } else if (const auto res = parser.find("komi", 0)) {
         lambda_syntax_not_understood(parser, 2);
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             out << m_ascii_engine->reset_komi(std::stof(in->str));
         } else {
             out << "syntax error : komi <float>";
         }
     } else if (const auto res = parser.find("boardsize", 0)) {
         lambda_syntax_not_understood(parser, 2);
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             out << m_ascii_engine->reset_boardsize(std::stoi(in->str));
         } else {
             out << "syntax error : boardsize <integral>";
         }
     } else if (const auto res = parser.find("input-pattens", 0)) {
         lambda_syntax_not_understood(parser, 2);
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             out << m_ascii_engine->input_features(std::stoi(in->str));
         } else {
             out << "syntax error : input-pattens <integral>";
@@ -122,7 +122,7 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         if (parser.get_count() == 1) {
             out << m_ascii_engine->dump_collect();
         } else {
-            auto filename = parser.get_commands(1)->str;
+            auto filename = parser.get_command(1)->str;
             out << m_ascii_engine->dump_collect(filename);
         }
     } else if (const auto res = parser.find("dump-sgf", 0)) {
@@ -130,7 +130,7 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         if (parser.get_count() == 1) {
             out << m_ascii_engine->dump_sgf();
         } else {
-            auto filename = parser.get_commands(1)->str;
+            auto filename = parser.get_command(1)->str;
             out << m_ascii_engine->dump_sgf(filename);
         }
     } else if (const auto res = parser.find("dump-misc-features", 0)) {
@@ -138,12 +138,45 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
         out << m_ascii_engine->misc_features();
     } else if (const auto res = parser.find("nn-benchmark", 0)) {
         lambda_syntax_not_understood(parser, 2);
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             out << m_ascii_engine->nn_batchmark(std::stoi(in->str));
         } else {
             out << "syntax error : nn-benchmark <integral>";
         }
-    } else {
+    } else if (const auto res = parser.find("time_settings", 0)) {
+        lambda_syntax_not_understood(parser, 5);
+        if (parser.get_count() < 4) {
+            out << "syntax error : time_settings main_time byo_yomi_time byo_yomi_stones";
+        } else {
+            const auto mtime = parser.get_command(1);
+            const auto btime = parser.get_command(2);
+            const auto stones = parser.get_command(3);
+
+            out << m_ascii_engine-> time_settings(mtime->get<int>(),
+                                                  btime->get<int>(),
+                                                  stones->get<int>());
+        }
+    } else if (const auto res = parser.find("time_left", 0)) {
+        lambda_syntax_not_understood(parser, 5);
+        if (parser.get_count() < 4) {
+            out <<  "syntax error : time_left color time stones";
+        } else {
+            const auto color = parser.get_command(1);
+            const auto time = parser.get_command(2);
+            const auto stones = parser.get_command(3);
+
+            if (color->get<std::string>() == "b" || color->get<std::string>() == "B" || color->get<std::string>() == "black" ||
+                color->get<std::string>() == "w" || color->get<std::string>() == "W" || color->get<std::string>() == "white") {
+
+               out << m_ascii_engine-> time_left(color->get<std::string>(),
+                                                 time->get<int>(),
+                                                 stones->get<int>());
+
+            } else {
+                out <<  "syntax error : invalid color";
+            }
+        }
+    }  else {
         out << "unknown command";
     }
 

@@ -31,8 +31,7 @@ public:
 
     void time_stream(std::ostream &out) const;
     void time_stream(std::ostream &out, int color) const;
-    void set_time_left(const int color, const int main_time,
-                       const int byo_time, const int stones);
+    void set_time_left(const int color, const int time, const int stones);
 
 private:
     int m_maintime;

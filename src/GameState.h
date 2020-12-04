@@ -52,7 +52,7 @@ public:
     void time_clock();
     float get_thinking_time() const;
     void recount_time(const int color);
-    void set_time_left(int color, int main_time, int byo_time, int stones);
+    void set_time_left(int color, int time, int stones);
 
 
     bool is_legal(const int vtx,

@@ -125,9 +125,6 @@ int Search::uct_search() {
     m_gamestate.time_clock();
     m_timer.clock();
 
-    const float thinking_time = m_rootstate.get_thinking_time();
-    auto_printf("Max thinking time : %.4f seconds\n", thinking_time);
-
     if (option<bool>("ponder")) {
         // If pondering, we clear nodes first.
         // The nodes are not necessary.
@@ -142,6 +139,10 @@ int Search::uct_search() {
     int select_move = Board::NO_VERTEX;
     bool keep_running = true;
     bool need_resign = false;
+
+    const float thinking_time = m_rootstate.get_thinking_time();
+    auto_printf("Max thinking time : %.4f seconds\n", thinking_time);
+
     prepare_uct_search();
     updata_root(m_rootnode);
 

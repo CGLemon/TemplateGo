@@ -23,38 +23,24 @@ public:
     void display();
 
     Response play_textmove(std::string);
-
     Response undo_move();
-
     Response showboard(int t = 0);
-
     Response nn_rawout(int symmetry = 0);
-
     Response reset_boardsize(const int bsize);
-
     Response reset_komi(const float komi);
-
     Response input_features(int symmetry);
-
     Response think(const int color = Board::INVAL);
-
     Response self_play();
-
     Response dump_collect(std::string file = "std-output");
-
     Response dump_sgf(std::string file = "std-output");
-
     Response set_playouts(const int p);
- 
     Response clear_board();
-
     Response misc_features();
-
     Response nn_batchmark(const int times);
-
     Response clear_cache();
-
     Response random_playmove();
+    Response time_settings(int maintime, int byotime, int byostones);
+    Response time_left(std::string color, int time, int stones);
 
     const GameState& get_state() const;
 

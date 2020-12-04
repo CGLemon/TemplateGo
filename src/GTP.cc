@@ -48,8 +48,9 @@ static const std::vector<std::string> gtp_commands = {"protocol_version",
                                                       "genmove",
                                                       "showboard",
                                                       "undo",
-                                                     /* "time_settings",
-                                                      "time_left" */};
+                                                      "time_settings",
+                                                      "time_left",
+                                                     };
 
 void GTP::execute(Utils::CommandParser &parser) {
 
@@ -107,18 +108,50 @@ void GTP::execute(Utils::CommandParser &parser) {
         }
         Utils::gtp_output("%s", gtp_response.c_str());
     } else if (const auto res = parser.find("komi", 0)) {
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             auto gtp_response = m_gtp_engine->reset_komi(std::stof(in->str));
             Utils::gtp_output("%s", gtp_response.c_str());
         } else {
-            Utils::gtp_output("syntax error : komi <float>");
+            Utils::gtp_fail("syntax error : komi <float>");
         }
     } else if (const auto res = parser.find("boardsize", 0)) {
-        if (const auto in = parser.get_commands(1)) {
+        if (const auto in = parser.get_command(1)) {
             auto gtp_response = m_gtp_engine->reset_boardsize(std::stoi(in->str));
             Utils::gtp_output("%s", gtp_response.c_str());
         } else {
             Utils::gtp_output("syntax error : boardsize <integral>");
+        }
+    } else if (const auto res = parser.find("time_settings", 0)) {
+        if (parser.get_count() < 4) {
+            Utils::gtp_fail("syntax error : time_settings main_time byo_yomi_time byo_yomi_stones");
+        } else {
+            const auto mtime = parser.get_command(1);
+            const auto btime = parser.get_command(2);
+            const auto stones = parser.get_command(3);
+
+            auto gtp_response = m_gtp_engine-> time_settings(mtime->get<int>(),
+                                                             btime->get<int>(),
+                                                             stones->get<int>());
+            Utils::gtp_output("%s", gtp_response.c_str());
+        }
+    } else if (const auto res = parser.find("time_left", 0)) {
+        if (parser.get_count() < 4) {
+            Utils::gtp_fail("syntax error : time_left color time stones");
+        } else {
+            const auto color = parser.get_command(1);
+            const auto time = parser.get_command(2);
+            const auto stones = parser.get_command(3);
+
+            if (color->get<std::string>() == "b" || color->get<std::string>() == "B" || color->get<std::string>() == "black" ||
+                color->get<std::string>() == "w" || color->get<std::string>() == "W" || color->get<std::string>() == "white") {
+
+                auto gtp_response = m_gtp_engine-> time_left(color->get<std::string>(),
+                                                             time->get<int>(),
+                                                             stones->get<int>());
+                Utils::gtp_output("%s", gtp_response.c_str());
+            } else {
+                Utils::gtp_fail("syntax error : invalid color");
+            }
         }
     } else {
         Utils::gtp_fail("unknown command");
