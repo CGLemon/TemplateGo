@@ -78,7 +78,7 @@ void init_options_map() {
     options_map["waittime"] << Utils::Option::setoption(10);
 
     // uct search
-    options_map["resigned_threshold"] << Utils::Option::setoption(0.1f, 1, 0);
+    options_map["resigned_threshold"] << Utils::Option::setoption(0.2f, 1, 0);
     options_map["allowed_pass_ratio"] << Utils::Option::setoption(0.8f, 1, 0);
     options_map["playouts"] << Utils::Option::setoption(1600);
     options_map["dirichlet_noise"] << Utils::Option::setoption(false);
@@ -176,6 +176,12 @@ ArgsParser::ArgsParser(int argc, char** argv) {
         }
     }
 
+    if (const auto res = parser.find_next("--boardsize")) {
+        if (is_parameter(res->str)) {
+            set_option("boardsize", res->get<int>());
+        }
+    }
+
     if (const auto res = parser.find_next(List{"--mode", "-m"})) {
         if (is_parameter(res->str)) {
             if (res->str == "ascii" || res->str == "gtp" || res->str == "selfplay") {
@@ -221,14 +227,43 @@ ArgsParser::ArgsParser(int argc, char** argv) {
 
 void ArgsParser::help() const {
     Utils::auto_printf("Argumnet\n");
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --help, -h\n");
+    Utils::auto_printf("   Display the useful argumnet.\n");
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --mode, -m [ascii/gtp]\n");
+    Utils::auto_printf("   Choose the mode which you want. Ascii mode is default.\n");
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --playouts, -p <integral>\n");
+    Utils::auto_printf("   The Monte Carlo Tree Search simulation times\n");
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --threads, -t <integral>\n");
+    Utils::auto_printf("   The Monte Carlo Tree Search threads\n");
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --weights, -w <weights file>\n");
+    Utils::auto_printf("   The weights file name.\n");
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --komi <float>\n");
+    Utils::auto_printf("   The start komi of game. Default is %f.\n", DEFAULT_KOMI);
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --boardsize <integral>\n");
+    Utils::auto_printf("   The start board size of game. Default is %d.\n", BOARD_SIZE);
+    Utils::auto_printf("\n");
+
     Utils::auto_printf(" --batchsize, -b <integral>\n");
+    Utils::auto_printf("   The neural network forward batchsize. Default is %d.\n", 1);
+    Utils::auto_printf("\n");
+
+    Utils::auto_printf(" --resigned <float>\n");
+    Utils::auto_printf("   Default is %f.\n", 0.2f);
+    Utils::auto_printf("\n");
 }
 
 void ArgsParser::dump() const {
@@ -237,5 +272,6 @@ void ArgsParser::dump() const {
     }
     Utils::auto_printf("Threads : %d\n", option<int>("threads"));
     Utils::auto_printf("Batchsize : %d\n", option<int>("batchsize"));
+    Utils::auto_printf("Playouts : %d\n", option<int>("playouts"));
 }
 
