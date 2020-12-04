@@ -82,7 +82,7 @@ bool UCTNode::expend_children(Evaluation &evaluation,
                     continue;
 	            }
 
-                if (take_move) {
+                if (take_move && parameters()->collect) {
                     // If the move can take stone(s), cutting the pass node.
                     allow_pass = false;
                 } else if (eye_move) {
