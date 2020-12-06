@@ -60,6 +60,9 @@ GPU 加速 （加速 GPU 端神經網路運算，cuDNN可選）
 
 https://drive.google.com/drive/folders/1h4aDtKZV1NMG9IJggwHFYJ1EvslzYoVq?usp=sharing
 
+# 得獎
+2020 TAAI 九路圍棋 銀牌 ： https://www.tcga.tw/taai2020/zh_TW/#tschedule
+
 # TODO
 - [ ] 完整 GTP 的介面
 - [ ] 支援 SGF 格式
