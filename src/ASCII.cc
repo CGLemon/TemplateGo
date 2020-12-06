@@ -173,10 +173,28 @@ std::string ASCII::execute(Utils::CommandParser &parser) {
                                                  stones->get<int>());
 
             } else {
-                out <<  "syntax error : invalid color";
+                out << "syntax error : invalid color";
             }
         }
-    }  else {
+    } else if (const auto res = parser.find("final_status_list", 0)) {
+        lambda_syntax_not_understood(parser, 2);
+        auto success = bool{false};
+        auto response = std::string{};
+        if (const auto in = parser.get_command(1)) {
+            if (in->str == "alive") {
+                response = m_ascii_engine-> final_status_list(true);
+                success = true;
+            } else if (in->str == "dead") {
+                response = m_ascii_engine-> final_status_list(false);
+                success = true;
+            }
+        }
+        if (success) {
+            out << response;
+        } else {
+            out << "syntax error : final_status_list [alive/dead]";
+        }
+    } else {
         out << "unknown command";
     }
 

@@ -162,12 +162,12 @@ void GTP::execute(Utils::CommandParser &parser) {
             if (in->str == "alive") {
                 gtp_response = m_gtp_engine-> final_status_list(true);
                 success = true;
-            } else if (in->str == "alive") {
+            } else if (in->str == "dead") {
                 gtp_response = m_gtp_engine-> final_status_list(false);
                 success = true;
             }
         }
-        if (!success) {
+        if (success) {
             Utils::gtp_output("%s", gtp_response.c_str());
         } else {
             Utils::gtp_fail("syntax error : final_status_list [alive/dead]");

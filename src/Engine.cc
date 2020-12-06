@@ -265,16 +265,54 @@ Engine::Response Engine::time_left(std::string color, int time, int stones) {
 
 Engine::Response Engine::final_status_list(bool live) {
 
+    const auto& board = m_state->board;
+    auto eval_results = std::vector<Evaluation::NNeval>(Board::NUM_SYMMETRIES);
+    for (int s = 0; s < Board::NUM_SYMMETRIES; ++s) {
+        eval_results[s] = m_evaluation->network_eval(*m_state,  Network::Ensemble::DIRECT, s);
+    }
+
+    auto intersections = board.get_intersections();
+    auto color = board.get_to_move();
+    auto ownership = std::vector<float>(intersections, 0.0f);
+
+    for (int s = 0; s < Board::NUM_SYMMETRIES; ++s) {
+        for (int idx = 0; idx < intersections; ++idx) {
+            ownership[idx] += eval_results[s].ownership[idx];
+        }
+    }
+    for (int idx = 0; idx < intersections; ++idx) {
+        ownership[idx] /= static_cast<float>(Board::NUM_SYMMETRIES);
+    }
+
+    static constexpr auto OWBERSHIP_THRESHOLD = 0.7f;
+
     std::vector<std::string> stringlist;
     std::string result;
-    const auto& board = m_state->board;
     const auto bsize = board.get_boardsize();
     if (live) {
-        for (int i = 0; i < bsize; i++) {
-            for (int j = 0; j < bsize; j++) {
-                int vertex = board.get_vertex(i, j);
-
-                if (board.get_state(vertex) != Board::EMPTY) {
+        for (int y = 0; y < bsize; ++y) {
+            for (int x = 0; x < bsize; ++x) {
+                const auto vertex = board.get_vertex(x, y);
+                const auto index = board.get_index(x, y);
+                const auto state = board.get_state(vertex);
+                const auto owner = ownership[index];
+                if (state == color && owner > OWBERSHIP_THRESHOLD) {
+                    stringlist.emplace_back(board.get_stringlist(vertex));
+                } else if (state == !color && owner < (0.f - OWBERSHIP_THRESHOLD)) {
+                    stringlist.emplace_back(board.get_stringlist(vertex));
+                }
+            }
+        }
+    } else {
+        for (int y = 0; y < bsize; ++y) {
+            for (int x = 0; x < bsize; ++x) {
+                const auto vertex = board.get_vertex(x, y);
+                const auto index = board.get_index(x, y);
+                const auto state = board.get_state(vertex);
+                const auto owner = ownership[index];
+                if (state == color && owner < (0.f - OWBERSHIP_THRESHOLD)) {
+                    stringlist.emplace_back(board.get_stringlist(vertex));
+                } else if (state == !color && owner > OWBERSHIP_THRESHOLD) {
                     stringlist.emplace_back(board.get_stringlist(vertex));
                 }
             }
