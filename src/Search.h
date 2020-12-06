@@ -73,7 +73,7 @@ public:
     GameState m_rootstate;
     UCTNode *m_rootnode{nullptr};
 
-    void prepare_uct_search();
+    void prepare_uct_search(bool quiet = false);
 
 private:
     int nn_direct_output();
@@ -84,7 +84,7 @@ private:
     void play_simulation(GameState &currstate, UCTNode *const node,
                        UCTNode *const root_node, SearchResult &search_result);
 
-    void updata_root(UCTNode *root_node);
+    void updata_root(UCTNode *root_node, bool quiet = false);
     void set_playout(int playouts);
     bool is_stop_uct_search() const;
 

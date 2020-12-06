@@ -21,6 +21,7 @@ Search::Search(GameState &state, Evaluation &evaluation, Trainer &trainer)
     m_rootstate = m_gamestate;
     SearchPool.initialize(threads);
     m_threadGroup = std::make_unique<ThreadGroup<void>>(SearchPool);
+    
     m_parameters = std::make_shared<SearchParameters>();
 }
 
@@ -105,8 +106,6 @@ int Search::random_move(bool allow_pass) {
     return move;
 }
 
-
-
 // UCT search
 int Search::uct_search() {
 
@@ -121,13 +120,25 @@ int Search::uct_search() {
         } while(is_uct_running());
     };
 
+    const auto ponder_uct_worker = [&](){
+        do {
+            auto currstate = std::make_unique<GameState>(m_rootstate);
+            auto result = SearchResult{};
+            play_simulation(*currstate, m_rootnode, m_rootnode, result);
+            if (result.valid()) {
+                increment_playouts();
+            }
+        } while(m_playouts.load() < MAX_PLAYOUYS && is_uct_running());
+    };
+
     // Start to clock.
     m_gamestate.time_clock();
     m_timer.clock();
 
-    if (option<bool>("ponder")) {
+    if (option<bool>("ponder") && !m_rootstate.isGameOver()) {
         // If pondering, we clear nodes first.
         // The nodes are not necessary.
+        set_running(false);
         m_threadGroup->wait_all();
         clear_nodes();
     }
@@ -193,15 +204,21 @@ int Search::uct_search() {
 
     if (option<bool>("ponder") && select_move != Board::RESIGN) {
         m_rootstate.play_move(select_move);
-        m_threadGroup->fill_tasks(uct_worker);
+        if (!m_rootstate.isGameOver()) {
+            auto_printf("pondering...\n");
+            prepare_uct_search(true);
+            updata_root(m_rootnode, true);
+            m_threadGroup->fill_tasks(ponder_uct_worker);
+        }
     }
 
     return select_move;
-
 }
 
-void Search::prepare_uct_search() {
-    auto_printf("preparing uct search...\n");
+void Search::prepare_uct_search(bool quiet) {
+    if (!quiet) {
+        auto_printf("preparing uct search...\n");
+    }
     assert(m_rootnode == nullptr);
     auto root_data = std::make_shared<UCTData>();
     root_data->parameters = m_parameters;
@@ -212,8 +229,10 @@ void Search::prepare_uct_search() {
     set_running(true);
 }
 
-void Search::updata_root(UCTNode *root_node) {
-    auto_printf("updating root...\n");
+void Search::updata_root(UCTNode *root_node, bool quiet) {
+    if (!quiet) {
+        auto_printf("updating root...\n");
+    }
     std::shared_ptr<NNOutput> nn_output;
     root_node->prepare_root_node(m_evaluation, m_rootstate, nn_output);
     const auto to_move = m_rootstate.get_to_move();
@@ -224,19 +243,21 @@ void Search::updata_root(UCTNode *root_node) {
     }
 
     eval *= 100.f;
-    auto_printf("Root :\n");
-    auto_printf(" NN eval = ");
-    auto_printf("%f%% \n", eval);
+    if (!quiet) {
+        auto_printf("Root :\n");
+        auto_printf(" NN eval = ");
+        auto_printf("%f%% \n", eval);
+    }
 
     const auto komi = m_rootstate.get_komi();
     auto final_score = nn_output->final_score - komi;
     if (to_move == Board::WHITE) {
         final_score = 0 - final_score;
     }
-
-    auto_printf(" NN final score = ");
-    auto_printf("%.2f\n", final_score);
-
+    if (!quiet) {
+        auto_printf(" NN final score = ");
+        auto_printf("%.2f\n", final_score);
+    }
 }
 
 void Search::set_running(bool is_running) {
@@ -248,7 +269,7 @@ bool Search::is_uct_running() {
 }
 
 bool Search::is_over_playouts() const {
-    return m_playouts.load() < m_maxplayouts;;
+    return m_playouts.load() < m_maxplayouts;
 }
 
 int Search::select_best_move() {
@@ -357,5 +378,9 @@ bool Search::is_in_time(const float max_time) {
 
 Search::~Search() {
     set_running(false);
+    if (option<bool>("ponder")) {
+        m_threadGroup->wait_all();
+        clear_nodes();
+    }
     clear_nodes();
 }

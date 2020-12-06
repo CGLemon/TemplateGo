@@ -182,12 +182,19 @@ ArgsParser::ArgsParser(int argc, char** argv) {
         }
     }
 
+    if (const auto res = parser.find("--ponder")) {
+        set_option("ponder", true);
+        if (option<int>("threads") <= 1) {
+            Utils::auto_printf("Warning : If set ponder option true, the threadmust be great than one.\n");
+        }
+    }
+
     if (const auto res = parser.find_next(List{"--mode", "-m"})) {
         if (is_parameter(res->str)) {
             if (res->str == "ascii" || res->str == "gtp" || res->str == "selfplay") {
                 set_option("mode", res->str);
             } else {
-                Utils::auto_printf("syntax not understood : %s\n", res->get<const char*>());
+                Utils::auto_printf("Warning :  Syntax not understood : %s\n", res->get<const char*>());
             }
         }
     }
@@ -231,6 +238,10 @@ void ArgsParser::help() const {
 
     Utils::auto_printf(" --help, -h\n");
     Utils::auto_printf("   Display the useful argumnet.\n");
+    Utils::auto_printf("\n");
+
+    Utils::auto_printf(" --ponder\n");
+    Utils::auto_printf("   Still thinking in opponent time.\n");
     Utils::auto_printf("\n");
 
     Utils::auto_printf(" --mode, -m [ascii/gtp]\n");
