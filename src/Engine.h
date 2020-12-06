@@ -41,6 +41,7 @@ public:
     Response random_playmove();
     Response time_settings(int maintime, int byotime, int byostones);
     Response time_left(std::string color, int time, int stones);
+    Response final_status_list(bool live);
 
     const GameState& get_state() const;
 

@@ -459,6 +459,25 @@ void Board::text_display() const {
     auto_printf("%s\n", res.c_str());
 }
 
+std::string Board::get_stringlist(const int vertex) const {
+
+    std::string result;
+
+    auto start = m_string.parent[vertex];
+    auto newpos = start;
+
+    do {
+        result += vertex_to_string(newpos) + " ";
+        newpos = m_string.next[newpos];
+    } while (newpos != start);
+
+    // eat last space
+    assert(!result.empty());
+    result.resize(result.size() - 1);
+
+    return result;
+}
+
 std::uint64_t Board::calc_symmerty_hash(int sym) const {
     return calc_hash(m_komove, sym);
 }

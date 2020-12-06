@@ -263,7 +263,36 @@ Engine::Response Engine::time_left(std::string color, int time, int stones) {
     return Response{};
 }
 
+Engine::Response Engine::final_status_list(bool live) {
+
+    std::vector<std::string> stringlist;
+    std::string result;
+    const auto& board = m_state->board;
+    const auto bsize = board.get_boardsize();
+    if (live) {
+        for (int i = 0; i < bsize; i++) {
+            for (int j = 0; j < bsize; j++) {
+                int vertex = board.get_vertex(i, j);
+
+                if (board.get_state(vertex) != Board::EMPTY) {
+                    stringlist.emplace_back(board.get_stringlist(vertex));
+                }
+            }
+        }
+    }
+
+    // remove multiple mentions of the same string
+    // unique reorders and returns new iterator, erase actually deletes
+    std::sort(begin(stringlist), end(stringlist));
+    stringlist.erase(std::unique(begin(stringlist), end(stringlist)),
+                     end(stringlist));
+
+    for (size_t i = 0; i < stringlist.size(); i++) {
+        result += (i == 0 ? "" : "\n") + stringlist[i];
+    }
+    return result;
+}
+
 const GameState& Engine::get_state() const {
     return *m_state;
 }
-

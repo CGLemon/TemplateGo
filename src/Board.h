@@ -162,6 +162,7 @@ public:
 
     std::uint64_t get_ko_hash() const;
     std::uint64_t get_hash() const;
+    std::string get_stringlist(const int vertex) const;
    /*
     * =====================================================================
     */

@@ -50,6 +50,7 @@ static const std::vector<std::string> gtp_commands = {"protocol_version",
                                                       "undo",
                                                       "time_settings",
                                                       "time_left",
+                                                      "final_status_list",
                                                      };
 
 void GTP::execute(Utils::CommandParser &parser) {
@@ -152,6 +153,24 @@ void GTP::execute(Utils::CommandParser &parser) {
             } else {
                 Utils::gtp_fail("syntax error : invalid color");
             }
+        }
+    } else if (const auto res = parser.find("final_status_list", 0)) {
+
+        auto success = bool{false};
+        auto gtp_response = std::string{};
+        if (const auto in = parser.get_command(1)) {
+            if (in->str == "alive") {
+                gtp_response = m_gtp_engine-> final_status_list(true);
+                success = true;
+            } else if (in->str == "alive") {
+                gtp_response = m_gtp_engine-> final_status_list(false);
+                success = true;
+            }
+        }
+        if (!success) {
+            Utils::gtp_output("%s", gtp_response.c_str());
+        } else {
+            Utils::gtp_fail("syntax error : final_status_list [alive/dead]");
         }
     } else {
         Utils::gtp_fail("unknown command");
