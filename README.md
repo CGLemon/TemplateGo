@@ -24,7 +24,8 @@ TemplateGo 同時使用 KataGo 和 Sai 的技術，支援動態貼目和預測�
 
 #  在 Linux ( Ubuntu ) / MacOS 上編譯
 
-    $ cd TemplateGo-beta
+    $ git clone 
+    $ cd TemplateGo
     $ mkdir build
     $ cd build
     $ cmake ..
