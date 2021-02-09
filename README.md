@@ -2,15 +2,29 @@
 GTP 協議的圍棋引擎
 
 # 警告
-目前只完成部份的功能，且只在 Ubuntu 上測試過，整體還不完善，但基本能運行
+目前只完成部份的功能，且只在 Ubuntu 和 MacOS 上測試過，整體還不完善，但基本能運行
+
+# 需求
+C++14
+
+Eigen (可選)
+
+OpenBlas (可選)
+
+CUDA (可選)
+
+cuDNN (可選)
+
+
 
 # 特色
-基於 Leela Zero 開發，但改進 Leela Zero 上一些缺陷和 bug 並擴展功能。不同於其他圍棋引擎，像是 Leela Zero 或 KataGo, TemplateGO 不需要任何的依賴庫，就可以完成編譯。
+以 Leela Zero 當基礎模板，重新開發並擴展其功能。不同於其他使用神經網路的圍棋引擎，像是 Leela Zero 或 KataGo, TemplateGO 不需要任何的依賴庫，就可以完成編譯。
+TemplateGo 同時使用 KataGo 和 Sai 的技術，支援動態貼目和預測最終結果的功能。
 
 
-# 編譯 on Linux ( Ubuntu )
+#  在 Linux ( Ubuntu ) / MacOS 上編譯
 
-    $ cd TemplateGo-master
+    $ cd TemplateGo-beta
     $ mkdir build
     $ cd build
     $ cmake ..
@@ -30,28 +44,29 @@ GPU 加速 （加速 GPU 端神經網路運算，cuDNN可選）
     $ cmake .. -DGPU_BACKEND=CUDA
     $ cmake .. -DUSE_CUDNN=1
 
-ZLIB 庫
+
+# GTP 介面
+
+可以使用支援 GTP 的 UI 介面（例：sabaki https://sabaki.yichuanshen.de/ ），以下範例
+
+    $ ./TemplateGo --mode gtp -w <Network file>.txt -p 100
     
-    $ cmake .. -DUSE_ZLIB=1
-    
-    
-# 如何使用
+（目前 GTP 的介面只完成一部分，但不影響在 sabaki 上使用）
 
-下載 Leela Zero 的網路權重 https://zero.sjeng.org/ ，解壓縮後在終端機使用，以下範例
 
-    $ ./TemplateGo -w <Network file>.txt -p 100
+# 測試的權重
 
-# GTP 界面
-可以使用支援 GTP 的 UI 界面（例：sabaki https://sabaki.yichuanshen.de/ ），以下範例
+這是在九路棋盤上自我對戰的權重，歡迎下載並使用。
 
-    $ ./TemplateGo -g -w <Network file>.txt -p 100
+https://drive.google.com/drive/folders/1h4aDtKZV1NMG9IJggwHFYJ1EvslzYoVq?usp=sharing
+
+# 得獎
+2020 TAAI 九路圍棋 銀牌 ： https://www.tcga.tw/taai2020/zh_TW/#tschedule
 
 # TODO
+- [ ] 完整 GTP 的介面
 - [ ] 支援 SGF 格式
-- [ ] 增加時間控制器
 - [ ] 增加參數的優化算法 
 - [ ] 提昇 CUDA 運行效率 
-- [ ] 增加 GPU 端多線程的加速 
 - [ ] 增加 OpenCL 的支援 
 - [ ] 提昇內建 blas 的效率 
-- [ ] 增加 KataGo 網路權重的支援 

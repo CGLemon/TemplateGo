@@ -1,10 +1,6 @@
 cmake_minimum_required (VERSION 3.9)
 project (TemplateGo)
 
-if (USE_OPENMP) 
-	set(CMAKE_CXX_FLAGS "-fopenmp ${CMAKE_CXX_FLAGS}")
-endif()
-
 if (USE_AVX) 
 	set(CMAKE_CXX_FLAGS "-mavx -mfma ${CMAKE_CXX_FLAGS}")
 endif()
@@ -23,8 +19,10 @@ if(GPU_BACKEND STREQUAL "CUDA")
 
 	set(CUDA_STANDARD 14)
 	set(CMAKE_CUDA_FLAGS
-    "-gencode arch=compute_30,code=sm_30 -gencode arch=compute_30,code=compute_30 -gencode arch=compute_37,code=sm_37 -gencode arch=compute_53,code=sm_53 -gencode arch=compute_53,code=compute_53 -gencode arch=compute_70,code=sm_70 -gencode arch=compute_70,code=compute_70"
-    )
+    "-gencode arch=compute_53,code=sm_53 -gencode arch=compute_70,code=sm_70 -gencode  arch=compute_75,code=compute_75"
+	)
+	set(CMAKE_CUDA_FLAGS "-Xptxas -O3 -Xcompiler -fPIC ${CMAKE_CUDA_FLAGS}")
+  
 else()
 	message(STATUS "Using CPU backend.")
     message(" The GPU backend is much faster than CPU backend.")
@@ -34,11 +32,11 @@ else()
 		message(STATUS " Warning : ")
 		message(" You use cuDNN but not add Cuda, Please adding flag -DGPU_BACKEND=CUDA.\n")
 	endif()
-
 endif()
 
 set(IncludePath "${CMAKE_CURRENT_SOURCE_DIR}/src")
-set(CMAKE_CXX_FLAGS "-ffast-math -O3 -march=native -flto ${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "-Wall -Wextra -g -ffast-math -O3 -march=native -flto ${CMAKE_CXX_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "-flto -g")
 
 find_package(Threads REQUIRED)
 
@@ -92,11 +90,8 @@ else()
 endif()
 
 include_directories(${IncludePath})
-
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/LZ LZ_SRCS)
 aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src DIR_SRCS)
-aux_source_directory(${CMAKE_CURRENT_SOURCE_DIR}/src/KataGo KG_SRCS)
-add_executable(TemplateGo ${DIR_SRCS} ${CUDA_SRCS} ${LZ_SRCS} ${KG_SRCS})
+add_executable(TemplateGo ${DIR_SRCS} ${CUDA_SRCS})
 
 target_link_libraries(TemplateGo Threads::Threads)
 target_link_libraries(TemplateGo ${BLAS_LIBRARIES})
@@ -124,16 +119,16 @@ if(GPU_BACKEND STREQUAL "CUDA")
 	target_link_libraries(TemplateGo ${CUDNN_LIBRARY} ${CUDA_CUBLAS_LIBRARIES} ${CUDA_LIBRARIES})
 endif()
 
-if(USE_ZLIB)
-	find_package(ZLIB REQUIRED)
-	include_directories(${ZLIB_INCLUDE_DIRS})
-	target_link_libraries(TemplateGo ${ZLIB_LIBRARIES})
-	add_definitions(-DUSE_ZLIB)
-	message(STATUS "Using zlib.")
-	message(" The program can read gzip file")
-else()
-	message(STATUS "whihout using zlib.")
-	message(" Because of whiout using zlib.")
-	message(" The program can't read the gzip files.")
-	message(" If you want to use zlib, adding flag -DUSE_ZLIB=1.\n")
-endif()
+# if(USE_ZLIB)
+#	find_package(ZLIB REQUIRED)
+#	include_directories(${ZLIB_INCLUDE_DIRS})
+#	target_link_libraries(TemplateGo ${ZLIB_LIBRARIES})
+#	add_definitions(-DUSE_ZLIB)
+#	message(STATUS "Using zlib.")
+#	message(" The program can read gzip file")
+# else()
+#	message(STATUS "whihout using zlib.")
+#	message(" Because of whiout using zlib.")
+#	message(" The program can't read the gzip files.")
+#	message(" If you want to use zlib, adding flag -DUSE_ZLIB=1.\n")
+# endif()

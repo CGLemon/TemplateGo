@@ -1,38 +1,46 @@
 #include <iostream>
 #include <memory>
-#include <string>
 
-#include "Board.h"
-#include "Utils.h"
-#include "cfg.h"
 #include "config.h"
-#include "gtp.h"
+#include "ASCII.h"
+#include "GTP.h"
+#include "SelfPlay.h"
 
-using namespace std;
+static void ascii_loop() {
+    auto ascii = std::make_shared<ASCII>();
+}
 
+static void gtp_loop() {
+    auto gtp = std::make_shared<GTP>();
+}
 
+static void selfplay_loop() {
+    auto gtp = std::make_shared<SelfPlay>();
+}
 
-void normal_loop() {
+const static std::string get_License() {
 
-  auto maingame = std::make_shared<GameState>();
-  maingame->init_game(cfg_boardsize, cfg_komi);
-
-  gtp::init_engine(*maingame);  
-
-  while (true) {
-    maingame->display();
-    auto input = std::string{};
-    Utils::auto_printf("TemplateGo : \n");
-    if (std::getline(std::cin, input)) {
-      gtp::execute(input);
-    }
-  }
+    auto out = std::ostringstream{};
+    return out.str();
 }
 
 int main(int argc, char **argv) {
 
-  gtp::gtp_init_all(argc, argv);
-  normal_loop();
+    init_basic_parameters();
+    auto args = std::make_shared<ArgsParser>(argc, argv);
 
-  return 0;
+    // auto license = get_License();
+    // Utils::auto_printf("%s\n", license.c_str());
+    args->dump();
+
+    if (option<std::string>("mode") == "ascii") {
+        ascii_loop();
+    } else if (option<std::string>("mode") == "gtp") {
+        gtp_loop();
+    } else if (option<std::string>("mode") == "selfplay") {
+        selfplay_loop();
+    }
+
+
+    return 0;
 }

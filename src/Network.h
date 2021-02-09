@@ -3,54 +3,59 @@
 
 #include <cassert>
 
+#include "Model.h"
 #include "Board.h"
-#include "CacheTable.h"
+#include "Cache.h"
 #include "GameState.h"
-#include "LZ/LZNetParameters.h"
-#include "LZ/LZModel.h"
-#include "LZ/LZCPUbackend.h"
-
-static constexpr int NUM_SYMMETRIES = Board::NUM_SYMMETRIES;
-static constexpr int IDENTITY_SYMMETRY = Board::IDENTITY_SYMMETRY;
-
 class Network {
 public:
-  enum class Networkfile_t { LEELAZ };
+    ~Network();
 
-  enum Ensemble { DIRECT, RANDOM_SYMMETRY, AVERAGE };
+    enum Ensemble { NONE, DIRECT, RANDOM_SYMMETRY, AVERAGE };
 
-  using Netresult = NNResult;
-  using PolicyVertexPair = std::pair<float, int>;
+    using Netresult = NNResult;
+    using PolicyVertexPair = std::pair<float, int>;
 
-  void initialize(int playouts, const std::string &weightsfile,
-                  Networkfile_t file_type = Networkfile_t::LEELAZ);
+    void initialize(const int playouts, const std::string &weightsfile);
 
+    void reload_weights(const std::string &weightsfile);
 
-  Netresult get_output(const GameState *const state, const Ensemble ensemble,
-                       const int symmetry = -1, const bool read_cache = true,
-                       const bool write_cache = true,
-                       const bool force_selfcheck = false);
+    Netresult get_output(const GameState *const state,
+                         const Ensemble ensemble,
+                         const int symmetry = -1,
+                         const bool read_cache = true,
+                         const bool write_cache = true);
 
-  static std::pair<int, int> get_intersections_pair(int idx, int boradsize);
+    void clear_cache();
+
+    void release_nn();
+
+    void set_playouts(const int playouts);
+
 
 private:
-  void init_leelaz_batchnorm_weights();
+    static constexpr int NUM_SYMMETRIES = Board::NUM_SYMMETRIES;
+    static constexpr int IDENTITY_SYMMETRY = Board::IDENTITY_SYMMETRY;
+
+    bool probe_cache(const GameState *const state,
+                     Network::Netresult &result,
+                     const int symmetry = -1);
+
+    void dummy_forward(std::vector<float> &policy,
+                       std::vector<float> &ownership,
+                       std::vector<float> &final_score,
+                       std::vector<float> &values);
 
 
-  bool probe_cache(const GameState *const state, Network::Netresult &result);
-
+    Netresult get_output_internal(const GameState *const state,
+                                  const int symmetry);
   
+    Netresult get_output_form_cache(const GameState *const state);
 
-  Netresult get_output_internal(const GameState *const state,
-                                const int symmetry);
+    Cache<NNResult> m_cache;
 
-
-  CacheTable<NNResult> m_nncache;
-
-  std::unique_ptr<LZ::NNpipe> m_lz_forward;
-  std::shared_ptr<LZ::LZModel::ForwardPipeWeights> m_lz_weights;
-
-
+    std::unique_ptr<Model::NNpipe> m_forward;
+    std::shared_ptr<Model::NNweights> m_weights;
 
 };
 

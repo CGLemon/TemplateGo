@@ -1,46 +1,49 @@
 #include "Random.h"
+#include <chrono>
 
 namespace random_utils {
 
 static inline std::uint64_t splitmix64(std::uint64_t z) {
-  /*
-   * The parameter detail are from
-   * https://github.com/lemire/testingRNG/blob/master/source/splitmix64.h
-   */
+    /*
+     * The detail of parameteres are from
+     * https://github.com/lemire/testingRNG/blob/master/source/splitmix64.h
+     */
 
-  z += 0x9e3779b97f4a7c15;
-  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-  return z ^ (z >> 31);
+    z += 0x9e3779b97f4a7c15;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+    return z ^ (z >> 31);
 }
 
 static inline std::uint64_t rotl(const std::uint64_t x, const int k) {
-  return (x << k) | (x >> (64 - k));
+    return (x << k) | (x >> (64 - k));
 }
 
 static inline std::uint64_t get_seed(std::uint64_t seed) {
-  if (seed == THREADS_SEED) {
-    auto thread_id = std::hash<std::thread::id>()(std::this_thread::get_id());
-    seed = static_cast<std::uint64_t>(thread_id);
-  } else if (seed == TIME_SEED) {
-    auto get_time = std::time(NULL);
-    seed = static_cast<std::uint64_t>(get_time);
-  }
-  return seed;
+    if (seed == THREADS_SEED) {
+        // Get the seed from thread id.
+        auto thread_id = std::hash<std::thread::id>()(std::this_thread::get_id());
+        seed = static_cast<std::uint64_t>(thread_id);
+    } else if (seed == TIME_SEED) {
+        // Get the seed from system time.
+        auto get_time = std::chrono::system_clock::now().time_since_epoch().count();
+        seed = static_cast<std::uint64_t>(get_time);
+    }
+    return seed;
 }
 } // namespace random_utils
 
 
-#define __RANDOM_INIT(__TYPE, __CT)                  \
+#define __RANDOM_INIT(TYPE__, CNT__)                 \
 template<>                                           \
-void Random<__TYPE>::seed_init(std::uint64_t seed) { \
-  seed = random_utils::get_seed(seed);               \
-  static_assert(SEED_SZIE >= __CT,                   \
-      "The number of seeds is not enough?\n");       \
-  for (auto i = size_t{0}; i < SEED_SZIE; ++i) {     \
-    seed = random_utils::splitmix64(seed);           \
-    Random<__TYPE>::m_seeds[i] = seed;               \
-  }                                                  \
+void Random<TYPE__>::seed_init(std::uint64_t seed) { \
+    seed = random_utils::get_seed(seed);             \
+    static_assert(SEED_SZIE >= CNT__,                \
+        "The number of seeds is not enough?\n");     \
+    for (auto i = size_t{0}; i < SEED_SZIE; ++i) {   \
+        seed = random_utils::splitmix64(seed);       \
+        Random<TYPE__>::m_seeds[i] = seed;           \
+    }                                                \
 }
 
 
@@ -54,35 +57,35 @@ __RANDOM_INIT(random_t::XoroShiro128Plus, 2);
 
 template<>
 std::uint64_t Random<random_t::SplitMix_64>::randuint64() {
-  /*
-   * The parameter detail are from
-   * https://github.com/lemire/testingRNG/blob/master/source/splitmix64.h
-   */
-  static constexpr size_t seed_Idx = SEED_SZIE - 1;
+    /*
+     * The detail of parameteres are from
+     * https://github.com/lemire/testingRNG/blob/master/source/splitmix64.h
+     */
+    static constexpr size_t seed_Idx = SEED_SZIE - 1;
 
-  Random<random_t::SplitMix_64>::m_seeds[seed_Idx] += 0x9e3779b97f4a7c15;
-  auto z = Random<random_t::SplitMix_64>::m_seeds[seed_Idx];
-  z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-  z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-  return z ^ (z >> 31);
+    Random<random_t::SplitMix_64>::m_seeds[seed_Idx] += 0x9e3779b97f4a7c15;
+    auto z = Random<random_t::SplitMix_64>::m_seeds[seed_Idx];
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+    return z ^ (z >> 31);
 }
 
 template<>
 std::uint64_t Random<random_t::XoroShiro128Plus>::randuint64() {
-  /*
-   * The parameter detail are from
-   * https://github.com/lemire/testingRNG/blob/master/source/xoroshiro128plus.h
-   */
+    /*
+     * The detail of parameteres are from
+     * https://github.com/lemire/testingRNG/blob/master/source/xoroshiro128plus.h
+     */
 
-  const std::uint64_t s0 = Random<random_t::XoroShiro128Plus>::m_seeds[0];
-  std::uint64_t s1 = Random<random_t::XoroShiro128Plus>::m_seeds[1];
-  const std::uint64_t result = s0 + s1;
+    const std::uint64_t s0 = Random<random_t::XoroShiro128Plus>::m_seeds[0];
+    std::uint64_t s1 = Random<random_t::XoroShiro128Plus>::m_seeds[1];
+    const std::uint64_t result = s0 + s1;
 
-  s1 ^= s0;
-  Random<random_t::XoroShiro128Plus>::m_seeds[0] = 
-      random_utils::rotl(s0, 55) ^ s1 ^ (s1 << 14);
-  Random<random_t::XoroShiro128Plus>::m_seeds[1] = 
-      random_utils::rotl(s1, 36);
+    s1 ^= s0;
+    Random<random_t::XoroShiro128Plus>::m_seeds[0] = 
+        random_utils::rotl(s0, 55) ^ s1 ^ (s1 << 14);
+    Random<random_t::XoroShiro128Plus>::m_seeds[1] = 
+        random_utils::rotl(s1, 36);
 
-  return result;
+    return result;
 }
